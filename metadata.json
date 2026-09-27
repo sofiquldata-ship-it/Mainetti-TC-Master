@@ -1,0 +1,6 @@
+{
+  "name": "Mainetti TC Management Console",
+  "description": "Industrial Transaction Certificate (TC) tracking and operations dashboard for apparel supply chains.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
