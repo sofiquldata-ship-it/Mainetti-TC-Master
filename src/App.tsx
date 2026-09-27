@@ -30,30 +30,14 @@ import { User } from 'firebase/auth';
 import { UploadCloud, FileSpreadsheet, PlusCircle } from 'lucide-react';
 
 export default function App() {
-  // Initialize state with persistent storage if available (and clear test workflow cell values as requested)
+  // Initialize state with persistent storage if available
   const [piList, setPiList] = useState<PIData[]>(() => {
     const saved = loadFromPersistentStorage();
     if (saved.data && saved.data.length > 0) {
-      const cleaned = saved.data.map((item) => {
-        const itemClean = {
-          ...item,
-          invoiceNumber: '',
-          tcRequestDate: '',
-          receivedCommercialDocDate: '',
-          draftTcDate: '',
-          draftConfirmationDate: '',
-          revisionQty: 0,
-          finalTcApplyDate: '',
-          finalTcReceivedDate: '',
-          tcNumber: '',
-        };
-        return {
-          ...itemClean,
-          tcStatus: computeAutomatedTcStatus(itemClean),
-        };
-      });
-      saveToPersistentStorage(cleaned, saved.fileInfo);
-      return cleaned;
+      return saved.data.map((item) => ({
+        ...item,
+        tcStatus: computeAutomatedTcStatus(item),
+      }));
     }
     return [];
   });
