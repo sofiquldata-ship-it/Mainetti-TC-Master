@@ -29,20 +29,93 @@ SCOPES.forEach((scope) => provider.addScope(scope));
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
 
+const TOKEN_KEY = 'mainetti_google_oauth_token_v2';
+const USER_KEY = 'mainetti_google_oauth_user_v2';
+const EXPIRY_KEY = 'mainetti_google_oauth_expiry_v2';
+
+export const saveTokenToStorage = (token: string, user: any) => {
+  try {
+    cachedAccessToken = token;
+    localStorage.setItem(TOKEN_KEY, token);
+    const userInfo = {
+      displayName: user.displayName || 'Google Connected User',
+      email: user.email || 'user@google.com',
+      photoURL: user.photoURL || '',
+      uid: user.uid || 'gis-' + Date.now(),
+    };
+    localStorage.setItem(USER_KEY, JSON.stringify(userInfo));
+    // Google access tokens expire in 3600s. Store expiration timestamp (55 minutes for safety)
+    const expiresAt = Date.now() + 55 * 60 * 1000;
+    localStorage.setItem(EXPIRY_KEY, String(expiresAt));
+  } catch (e) {
+    console.error('Failed to save token to localStorage:', e);
+  }
+};
+
+export const getStoredTokenAndUser = (): { token: string; user: any } | null => {
+  try {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const rawUser = localStorage.getItem(USER_KEY);
+    const expiryStr = localStorage.getItem(EXPIRY_KEY);
+
+    if (!token || !rawUser || !expiryStr) return null;
+
+    const expiresAt = parseInt(expiryStr, 10);
+    if (isNaN(expiresAt) || Date.now() > expiresAt) {
+      clearTokenStorage();
+      return null;
+    }
+
+    const user = JSON.parse(rawUser);
+    cachedAccessToken = token;
+    return { token, user };
+  } catch (e) {
+    return null;
+  }
+};
+
+export const clearTokenStorage = () => {
+  try {
+    cachedAccessToken = null;
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(EXPIRY_KEY);
+  } catch (e) {
+    console.error('Failed to clear token storage:', e);
+  }
+};
+
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
   onAuthFailure?: () => void
 ) => {
+  // Restore saved session immediately on page load / reload if valid
+  const stored = getStoredTokenAndUser();
+  if (stored) {
+    cachedAccessToken = stored.token;
+    if (onAuthSuccess) onAuthSuccess(stored.user as User, stored.token);
+  }
+
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
       if (cachedAccessToken) {
+        saveTokenToStorage(cachedAccessToken, user);
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-      } else if (!isSigningIn) {
-        if (onAuthFailure) onAuthFailure();
+      } else {
+        const stored = getStoredTokenAndUser();
+        if (stored) {
+          if (onAuthSuccess) onAuthSuccess(user, stored.token);
+        } else if (!isSigningIn) {
+          if (onAuthFailure) onAuthFailure();
+        }
       }
     } else {
-      cachedAccessToken = null;
-      if (onAuthFailure) onAuthFailure();
+      const stored = getStoredTokenAndUser();
+      if (stored) {
+        if (onAuthSuccess) onAuthSuccess(stored.user as User, stored.token);
+      } else {
+        if (onAuthFailure) onAuthFailure();
+      }
     }
   });
 };
@@ -72,6 +145,7 @@ export const gisTokenClientSignIn = (): Promise<{ user: User; accessToken: strin
                 email: 'user@google.com',
                 uid: 'gis-' + Date.now(),
               };
+              saveTokenToStorage(response.access_token, mockUser);
               resolve({ user: mockUser, accessToken: response.access_token });
             } else {
               reject(new Error('No access token received from Google OAuth'));
@@ -108,10 +182,10 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     }
 
     cachedAccessToken = credential.accessToken;
+    saveTokenToStorage(credential.accessToken, result.user);
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     console.warn('Firebase popup sign-in attempt encountered issue:', error);
-    // 2. If unauthorized domain or popup blocked on Vercel/custom host, try direct GIS token client
     if (
       error?.code === 'auth/unauthorized-domain' ||
       error?.message?.includes('unauthorized-domain') ||
@@ -123,7 +197,7 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
         return gisRes;
       } catch (gisError) {
         console.error('GIS token client fallback error:', gisError);
-        throw error; // Throw original error so UI can display domain authorization instructions
+        throw error;
       }
     }
     throw error;
@@ -133,7 +207,9 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
-  return cachedAccessToken;
+  if (cachedAccessToken) return cachedAccessToken;
+  const stored = getStoredTokenAndUser();
+  return stored ? stored.token : null;
 };
 
 export const setCachedAccessToken = (token: string | null) => {
@@ -141,6 +217,10 @@ export const setCachedAccessToken = (token: string | null) => {
 };
 
 export const googleSignOut = async () => {
-  await signOut(auth);
-  cachedAccessToken = null;
+  try {
+    await signOut(auth);
+  } catch (e) {
+    console.warn('SignOut error:', e);
+  }
+  clearTokenStorage();
 };

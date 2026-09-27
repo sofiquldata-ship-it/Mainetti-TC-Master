@@ -21,7 +21,7 @@ import {
   Database,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
-import { googleSignIn, googleSignOut, gisTokenClientSignIn } from '../utils/googleAuth';
+import { googleSignIn, googleSignOut, gisTokenClientSignIn, getStoredTokenAndUser } from '../utils/googleAuth';
 import {
   exportDataToGoogleSheets,
   syncDataToExistingSpreadsheet,
@@ -88,6 +88,25 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
 
   if (!isOpen) return null;
 
+  const ensureActiveToken = async (): Promise<string | null> => {
+    if (accessToken) return accessToken;
+    const stored = getStoredTokenAndUser();
+    if (stored) {
+      onAuthSuccess(stored.user, stored.token);
+      return stored.token;
+    }
+    try {
+      const res = await googleSignIn();
+      if (res) {
+        onAuthSuccess(res.user, res.accessToken);
+        return res.accessToken;
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Please sign in with Google to continue.');
+    }
+    return null;
+  };
+
   const handleSignIn = async () => {
     setIsSigningIn(true);
     setErrorMsg(null);
@@ -106,16 +125,14 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
   // 1. Sync / Push to currently linked sheet (Maintains Permanent URL)
   const handleSyncToLinkedSheet = async () => {
     if (!linkedSheet) return;
-    if (!accessToken) {
-      await handleSignIn();
-      return;
-    }
+    const token = await ensureActiveToken();
+    if (!token) return;
 
     setIsSyncing(true);
     setErrorMsg(null);
     setSuccessMsg(null);
     try {
-      const res = await syncDataToExistingSpreadsheet(accessToken, linkedSheet.spreadsheetId, data);
+      const res = await syncDataToExistingSpreadsheet(token, linkedSheet.spreadsheetId, data);
       setExportResult(res);
       const updated = getSavedLinkedSheet();
       setLinkedSheet(updated);
@@ -136,16 +153,14 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
   // 2. Pull / Import live data FROM Google Sheet into App
   const handlePullFromLinkedSheet = async () => {
     if (!linkedSheet) return;
-    if (!accessToken) {
-      await handleSignIn();
-      return;
-    }
+    const token = await ensureActiveToken();
+    if (!token) return;
 
     setIsPulling(true);
     setErrorMsg(null);
     setSuccessMsg(null);
     try {
-      const result = await importDataFromGoogleSpreadsheet(accessToken, linkedSheet.spreadsheetId);
+      const result = await importDataFromGoogleSpreadsheet(token, linkedSheet.spreadsheetId);
       const fileInfo: UploadedFileInfo = {
         fileName: `${result.title}.gsheet`,
         fileSize: result.rowCount * 128,
@@ -170,16 +185,14 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
 
   // 3. Create brand new sheet and permanently link it
   const handleCreateNewSheet = async () => {
-    if (!accessToken) {
-      await handleSignIn();
-      return;
-    }
+    const token = await ensureActiveToken();
+    if (!token) return;
 
     setIsSyncing(true);
     setErrorMsg(null);
     setSuccessMsg(null);
     try {
-      const res = await exportDataToGoogleSheets(accessToken, data, sheetTitle);
+      const res = await exportDataToGoogleSheets(token, data, sheetTitle);
       setExportResult(res);
       const updated = getSavedLinkedSheet();
       setLinkedSheet(updated);
@@ -210,15 +223,13 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
       return;
     }
 
-    if (!accessToken) {
-      await handleSignIn();
-      return;
-    }
+    const token = await ensureActiveToken();
+    if (!token) return;
 
     setIsSyncing(true);
     setErrorMsg(null);
     try {
-      const res = await syncDataToExistingSpreadsheet(accessToken, extractedId, data);
+      const res = await syncDataToExistingSpreadsheet(token, extractedId, data);
       setExportResult(res);
       const updated = getSavedLinkedSheet();
       setLinkedSheet(updated);
