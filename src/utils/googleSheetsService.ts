@@ -17,6 +17,8 @@ export interface LinkedSheetConfig {
 
 const LINKED_SHEET_KEY = 'mainetti_tc_linked_google_sheet_v1';
 
+import { saveLinkedSheetToFirestore, fetchLinkedSheetFromFirestore } from './firestoreStorage';
+
 export const getSavedLinkedSheet = (): LinkedSheetConfig | null => {
   try {
     const raw = localStorage.getItem(LINKED_SHEET_KEY);
@@ -32,6 +34,19 @@ export const getSavedLinkedSheet = (): LinkedSheetConfig | null => {
   }
 };
 
+export const syncLinkedSheetFromFirestore = async (): Promise<LinkedSheetConfig | null> => {
+  const cloudConfig = await fetchLinkedSheetFromFirestore();
+  if (cloudConfig) {
+    try {
+      localStorage.setItem(LINKED_SHEET_KEY, JSON.stringify(cloudConfig));
+    } catch (e) {
+      console.error('Failed to mirror cloud sheet config to localStorage:', e);
+    }
+    return cloudConfig;
+  }
+  return getSavedLinkedSheet();
+};
+
 export const saveLinkedSheetConfig = (config: LinkedSheetConfig | null) => {
   try {
     if (!config) {
@@ -39,6 +54,8 @@ export const saveLinkedSheetConfig = (config: LinkedSheetConfig | null) => {
     } else {
       localStorage.setItem(LINKED_SHEET_KEY, JSON.stringify(config));
     }
+    // Also mirror to Firestore for cross-browser / multi-device synchronization
+    saveLinkedSheetToFirestore(config);
   } catch (e) {
     console.error('Failed to save linked sheet configuration:', e);
   }

@@ -701,7 +701,9 @@ export function sanitizePidData(list: PIData[]): PIData[] {
   });
 }
 
-// Persistent Storage Helpers (LocalStorage)
+import { savePIDataToFirestore } from './firestoreStorage';
+
+// Persistent Storage Helpers (LocalStorage + Firestore Cloud Sync)
 export function saveToPersistentStorage(data: PIData[], fileInfo: UploadedFileInfo | null) {
   try {
     const cleanData = sanitizePidData(data);
@@ -709,6 +711,8 @@ export function saveToPersistentStorage(data: PIData[], fileInfo: UploadedFileIn
     if (fileInfo) {
       localStorage.setItem(STORAGE_KEY_FILE_INFO, JSON.stringify(fileInfo));
     }
+    // Mirror to Firestore Cloud Database so all browsers and devices get the updated data
+    savePIDataToFirestore(cleanData);
     // Dispatch custom event for real-time UI synchronization across components & tabs
     window.dispatchEvent(new Event('storage'));
     window.dispatchEvent(new CustomEvent('pi_data_updated', { detail: cleanData }));

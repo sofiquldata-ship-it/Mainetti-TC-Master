@@ -20,10 +20,12 @@ import {
 import { initAuth } from './utils/googleAuth';
 import {
   getSavedLinkedSheet,
+  syncLinkedSheetFromFirestore,
   syncDataToExistingSpreadsheet,
   importDataFromGoogleSpreadsheet,
   LinkedSheetConfig,
 } from './utils/googleSheetsService';
+import { fetchPIDataFromFirestore } from './utils/firestoreStorage';
 import { User } from 'firebase/auth';
 import { UploadCloud, FileSpreadsheet, PlusCircle } from 'lucide-react';
 
@@ -88,6 +90,31 @@ export default function App() {
       }
     );
     return () => unsubscribe();
+  }, []);
+
+  // Initial cloud synchronization from Firestore to ensure every browser gets master sheet & dataset
+  useEffect(() => {
+    async function initCloudSync() {
+      // 1. Fetch linked Google Sheet configuration from Firestore
+      const cloudSheet = await syncLinkedSheetFromFirestore();
+      if (cloudSheet) {
+        setLinkedSheet(cloudSheet);
+      }
+
+      // 2. Fetch master PI dataset from Firestore if available
+      const cloudPiList = await fetchPIDataFromFirestore();
+      if (cloudPiList && cloudPiList.length > 0) {
+        const cleaned = cloudPiList.map((item) => ({
+          ...item,
+          tcStatus: computeAutomatedTcStatus(item),
+        }));
+        setPiList(cleaned);
+        const currentSaved = loadFromPersistentStorage();
+        saveToPersistentStorage(cleaned, currentSaved.fileInfo);
+      }
+    }
+
+    initCloudSync();
   }, []);
 
   // Real-time synchronization listener: Update UI automatically whenever persistent storage updates
