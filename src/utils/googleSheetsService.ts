@@ -79,6 +79,7 @@ const formatSheetRows = (data: PIData[]) => {
     'Standard',
     'Buyer',
     'Garment Factory / Customer',
+    'Contact Person',
     'Order Qty (PCS)',
     'Delivery Qty (PCS)',
     'Balance Qty (PCS)',
@@ -135,6 +136,7 @@ const formatSheetRows = (data: PIData[]) => {
       item.standard || 'GRS',
       item.buyer || '',
       item.customer || '',
+      item.contactPerson || 'System',
       safeOrderQty,
       delivQty,
       balQty,
@@ -594,6 +596,7 @@ export const importDataFromGoogleSpreadsheet = async (
   const piCol = findCol(['pinumber', 'pino', 'pi', 'orderno']);
   const buyerCol = findCol(['buyer', 'brand', 'retailer']);
   const custCol = findCol(['customer', 'factory', 'vendor', 'garmentfactory']);
+  const contactPersonCol = findCol(['contactperson', 'createdby', 'creator', 'createdbyname', 'user', 'contact']);
   const orderQtyCol = findCol(['orderqty', 'orderedqty', 'quantity', 'qty', 'orderquantity']);
   const delivQtyCol = findCol(['deliveryqty', 'deliveredqty', 'deliverdqty', 'delivqty', 'delivered']);
   const balQtyCol = findCol(['balanceqty', 'balqty', 'balance']);
@@ -637,6 +640,7 @@ export const importDataFromGoogleSpreadsheet = async (
     const piNumber = getCell(piCol, `PI-GS-${idx + 1}`);
     const buyer = getCell(buyerCol, 'Global Buyer');
     const customer = getCell(custCol, 'Partner Garment Factory');
+    const contactPerson = getCell(contactPersonCol, 'System');
     const orderDate = getCell(orderDateCol, '2026-08-15');
     const rawOrderQ = parseNum(row[orderQtyCol]);
     let orderQ = rawOrderQ <= 1 ? 0 : rawOrderQ;
@@ -689,6 +693,7 @@ export const importDataFromGoogleSpreadsheet = async (
       piNumber,
       buyer,
       customer,
+      contactPerson,
       orderDate,
       expectedTcDate: '2026-09-20',
       piAgeDays,
