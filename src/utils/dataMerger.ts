@@ -32,6 +32,7 @@ const COMPARABLE_FIELDS: FieldDefinition[] = [
   { key: 'orderDate', label: 'Order Date', type: 'date' },
   { key: 'customer', label: 'Customer', type: 'string' },
   { key: 'buyer', label: 'Buyer', type: 'string' },
+  { key: 'contactPerson', label: 'Contact Person', type: 'string' },
   { key: 'tcCost', label: 'TC Cost ($)', type: 'number' },
   { key: 'orderQuantity', label: 'Order Quantity', type: 'number' },
   { key: 'deliveryQuantity', label: 'Delivery Quantity', type: 'number' },

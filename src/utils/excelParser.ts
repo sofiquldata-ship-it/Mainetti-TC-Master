@@ -239,7 +239,8 @@ export async function parseExcelFile(
   const rateCol = findColIndex(['rate', 'unit rate', 'unit price', 'price']);
   const buyerCol = findColIndex(['buyer', 'brand', 'retailer', 'client', 'buyer name', 'brand name']);
   const customerCol = findColIndex(['customer', 'factory', 'vendor', 'supplier', 'garment factory', 'unit', 'party name', 'customer name']);
-  const orderDateCol = findColIndex(['order date', 'orderdate', 'date', 'po date', 'pi date', 'created', 'order dt']);
+  const contactPersonCol = findColIndex(['createdby', 'created by', 'created_by', 'createdbyname', 'contact person', 'contactperson', 'creator', 'created user', 'entered by', 'prepared by', 'user', 'contact']);
+  const orderDateCol = findColIndex(['order date', 'orderdate', 'po date', 'pi date', 'order dt', 'date']);
   const piAgeCol = findColIndex(['pi age', 'age', 'days', 'pi age days', 'ageing']);
   const tcStatusCol = findColIndex(['tc status', 'tcstatus', 'status', 'cert status', 'tc stage', 'stage']);
   const paymentStatusCol = findColIndex(['payment status', 'payment', 'paid status', 'payment terms', 'pay status']);
@@ -286,7 +287,6 @@ export async function parseExcelFile(
   const balQtyCol = findColIndex(['balance quantity', 'balance qty', 'bal qty', 'remaining qty', 'balance pcs', 'bal pcs', 'undelivered qty']);
   const poRefCol = findColIndex(['po reference', 'po ref', 'po number', 'po#', 'buyer po', 'po no']);
   const invoiceNumberCol = findColIndex(['invoice number', 'invoice no', 'inv no', 'invoice#', 'inv#', 'commercial invoice', 'commercial invoice no', 'invoice']);
-  const contactPersonCol = findColIndex(['createdby', 'created by', 'created_by', 'contact person', 'contactperson', 'creator', 'user', 'created user', 'entered by', 'prepared by', 'contact']);
   
   // New TC-related columns
   const tcRequestDateCol = findColIndex(['tc request date', 'request date', 'tc requested date', 'tc request', 'request dt']);
