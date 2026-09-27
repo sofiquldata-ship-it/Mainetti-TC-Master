@@ -89,7 +89,7 @@ export const MonthlyCostTrendChart: React.FC<MonthlyCostTrendChartProps> = ({ da
             Monthly TC Cost Trend
           </h3>
         </div>
-        <div className="flex items-center gap-2 text-[11px] font-mono text-slate-500">
+        <div className="flex items-center gap-3 text-[11px] font-mono text-slate-500">
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-xs bg-[#0b1b3d]" /> GRS/RCS
           </span>
@@ -112,6 +112,7 @@ export const MonthlyCostTrendChart: React.FC<MonthlyCostTrendChartProps> = ({ da
             const fscPct = (item.fscCost / totalItemCost) * 100;
             const gotsPct = (item.gotsCost / totalItemCost) * 100;
             const isSelected = safeIndex === idx;
+            const totalPiForMonth = item.tcIssuedCount + item.tcPendingCount;
 
             return (
               <div
@@ -119,15 +120,16 @@ export const MonthlyCostTrendChart: React.FC<MonthlyCostTrendChartProps> = ({ da
                 onMouseEnter={() => setActiveMonthIndex(idx)}
                 className="flex-1 flex flex-col items-center group cursor-pointer h-full justify-end"
               >
-                {/* Value tooltip tag above bar on hover */}
+                {/* Permanent Value Tag Above Bar */}
                 <div
-                  className={`text-[10px] font-mono font-bold transition-opacity whitespace-nowrap mb-1 ${
+                  className={`text-[10px] font-mono font-bold whitespace-nowrap mb-1 text-center transition-all ${
                     isSelected
-                      ? 'text-[#0b1b3d] opacity-100'
-                      : 'text-slate-400 opacity-0 group-hover:opacity-100'
+                      ? 'text-[#0b1b3d] scale-105 font-extrabold'
+                      : 'text-slate-700 font-bold opacity-90'
                   }`}
                 >
-                  ${item.cost >= 1000 ? `${(item.cost / 1000).toFixed(1)}k` : item.cost}
+                  <div className="leading-none">${item.cost >= 1000 ? `${(item.cost / 1000).toFixed(1)}k` : item.cost}</div>
+                  <div className="text-[9px] text-blue-800 font-bold mt-0.5">{totalPiForMonth} PIs</div>
                 </div>
 
                 {/* Stacked Bar Container */}
@@ -142,17 +144,17 @@ export const MonthlyCostTrendChart: React.FC<MonthlyCostTrendChartProps> = ({ da
                   <div
                     style={{ height: `${gotsPct}%` }}
                     className="bg-[#64748b] w-full"
-                    title={`GOTS: $${item.gotsCost}`}
+                    title={`GOTS: $${item.gotsCost} (${totalPiForMonth} PIs)`}
                   />
                   <div
                     style={{ height: `${fscPct}%` }}
                     className="bg-[#1e3a8a] w-full"
-                    title={`FSC: $${item.fscCost}`}
+                    title={`FSC: $${item.fscCost} (${totalPiForMonth} PIs)`}
                   />
                   <div
                     style={{ height: `${grsPct}%` }}
                     className="bg-[#0b1b3d] w-full"
-                    title={`GRS: $${item.grsCost}`}
+                    title={`GRS: $${item.grsCost} (${totalPiForMonth} PIs)`}
                   />
                 </div>
 
@@ -174,16 +176,19 @@ export const MonthlyCostTrendChart: React.FC<MonthlyCostTrendChartProps> = ({ da
 
       {/* Selected Month Detail Strip */}
       {activeItem && (
-        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-1 text-[11px] text-slate-600">
-            <Layers className="w-3.5 h-3.5 text-blue-900" />
+        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs flex-wrap gap-1">
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-600">
+            <Layers className="w-3.5 h-3.5 text-blue-900 shrink-0" />
             <strong className="text-[#0b1b3d]">{activeItem.month}:</strong>
+            <span className="font-semibold text-blue-900 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 text-[10px]">
+              {activeItem.tcIssuedCount + activeItem.tcPendingCount} PIs Total
+            </span>
             <span className="font-mono text-slate-500">
-              {activeItem.tcIssuedCount} Issued · {activeItem.tcPendingCount} In-Pipe
+              ({activeItem.tcIssuedCount} Issued · {activeItem.tcPendingCount} In-Pipe)
             </span>
           </div>
-          <div className="flex items-center gap-2 font-mono text-[11px]">
-            <span className="text-slate-500">Total:</span>
+          <div className="flex items-center gap-1.5 font-mono text-[11px]">
+            <span className="text-slate-500">Total TC Cost:</span>
             <span className="font-bold text-[#0b1b3d] tabular-nums">
               ${activeItem.cost.toLocaleString()} USD
             </span>

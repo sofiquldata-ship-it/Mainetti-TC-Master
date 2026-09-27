@@ -5,30 +5,48 @@ import { Truck, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
 interface OrderDeliverySnapshotProps {
   data: PIData[];
   onFilterDelivery?: (status: DeliveryStatus) => void;
+  activeDeliveryFilter?: string;
 }
 
 export const OrderDeliverySnapshot: React.FC<OrderDeliverySnapshotProps> = ({
   data,
+  onFilterDelivery,
+  activeDeliveryFilter,
 }) => {
   const deliveryStages: {
     status: DeliveryStatus;
     label: string;
+    matches: (d: PIData) => boolean;
   }[] = [
-    { status: 'Delivered', label: 'Delivered' },
-    { status: 'In Transit', label: 'In Transit' },
-    { status: 'Port Clearance', label: 'Port Clearance' },
-    { status: 'Dispatched', label: 'Dispatched' },
-    { status: 'Production Complete', label: 'Prod Complete' },
-    { status: 'Pending Dispatch', label: 'Pending Dispatch' },
+    {
+      status: 'Delivered',
+      label: 'Delivered',
+      matches: (d) => d.deliveryStatus === 'Delivered',
+    },
+    {
+      status: 'Dispatched',
+      label: 'Dispatched',
+      matches: (d) =>
+        d.deliveryStatus === 'Dispatched' ||
+        d.deliveryStatus === 'In Transit' ||
+        d.deliveryStatus === 'Port Clearance' ||
+        d.deliveryStatus === 'Production Complete',
+    },
+    {
+      status: 'Pending Dispatch',
+      label: 'Pending Dispatch',
+      matches: (d) => d.deliveryStatus === 'Pending Dispatch',
+    },
   ];
 
   const total = data.length || 1;
 
-  // Calculate items at risk: Delivered or In Transit where TC is NOT Issued (Pending or Overdue)
+  // Calculate items at risk: Delivered or Dispatched where TC is NOT Issued (Pending or Overdue)
   const deliveryAtRisk = data.filter(
     (d) =>
-      (d.deliveryStatus === 'Delivered' || d.deliveryStatus === 'In Transit' || d.deliveryStatus === 'Port Clearance') &&
-      d.tcStatus !== 'Issued'
+      (d.deliveryStatus === 'Delivered' || d.deliveryStatus === 'Dispatched' || d.deliveryStatus === 'In Transit') &&
+      d.tcStatus !== 'Issued' &&
+      d.tcStatus !== 'Final TC Received'
   );
 
   return (
@@ -54,27 +72,41 @@ export const OrderDeliverySnapshot: React.FC<OrderDeliverySnapshotProps> = ({
       </div>
 
       {/* Breakdown Grid */}
-      <div className="py-2.5 space-y-2">
-        {deliveryStages.map(({ status, label }) => {
-          const matching = data.filter((d) => d.deliveryStatus === status);
+      <div className="py-2.5 space-y-2.5">
+        {deliveryStages.map(({ status, label, matches }) => {
+          const matching = data.filter((d) => matches(d));
           const count = matching.length;
           const issuedCount = matching.filter((d) => d.tcStatus === 'Issued').length;
           const pendingCount = matching.filter(
             (d) => d.tcStatus === 'Pending' || d.tcStatus === 'Under Review'
           ).length;
           const overdueCount = matching.filter((d) => d.tcStatus === 'Overdue').length;
-          const requiredCount = matching.filter((d) => d.tcStatus === 'Required').length;
+          const requiredCount = matching.filter((d) => d.tcStatus === 'Required' || d.tcStatus === 'Not Requested').length;
 
           const pct = (count / total) * 100;
           const isAtRisk = (status === 'Delivered' || status === 'Port Clearance') && (overdueCount > 0 || pendingCount > 0);
+          const isSelected = activeDeliveryFilter === status;
 
           return (
-            <div key={status} className="flex flex-col gap-0.5">
+            <div
+              key={status}
+              onClick={() => onFilterDelivery && onFilterDelivery(status)}
+              className={`flex flex-col gap-0.5 p-1 rounded transition-all cursor-pointer ${
+                isSelected
+                  ? 'bg-blue-50 border border-blue-200 shadow-2xs'
+                  : 'hover:bg-slate-50 border border-transparent'
+              }`}
+              title={`Click to filter table by ${label}`}
+            >
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-1.5">
                   <span
                     className={`text-[11px] font-medium truncate ${
-                      isAtRisk ? 'text-red-900 font-semibold' : 'text-slate-700'
+                      isSelected
+                        ? 'text-blue-900 font-bold'
+                        : isAtRisk
+                        ? 'text-red-900 font-semibold'
+                        : 'text-slate-700'
                     }`}
                   >
                     {label}

@@ -286,6 +286,7 @@ export async function parseExcelFile(
   const balQtyCol = findColIndex(['balance quantity', 'balance qty', 'bal qty', 'remaining qty', 'balance pcs', 'bal pcs', 'undelivered qty']);
   const poRefCol = findColIndex(['po reference', 'po ref', 'po number', 'po#', 'buyer po', 'po no']);
   const invoiceNumberCol = findColIndex(['invoice number', 'invoice no', 'inv no', 'invoice#', 'inv#', 'commercial invoice', 'commercial invoice no', 'invoice']);
+  const contactPersonCol = findColIndex(['createdby', 'created by', 'created_by', 'contact person', 'contactperson', 'creator', 'user', 'created user', 'entered by', 'prepared by', 'contact']);
   
   // New TC-related columns
   const tcRequestDateCol = findColIndex(['tc request date', 'request date', 'tc requested date', 'tc request', 'request dt']);
@@ -330,6 +331,7 @@ export async function parseExcelFile(
     finalTcReceivedDate?: string;
     tcNumber?: string;
     invoiceNumber?: string;
+    contactPerson?: string;
   }
 
   const piGroups: Record<string, GroupedPI> = {};
@@ -467,6 +469,7 @@ export async function parseExcelFile(
     const parsedBalQ = rawRowBalQ <= 1 ? 0 : rawRowBalQ;
 
     const invNum = invoiceNumberCol !== -1 && rowArray[invoiceNumberCol] ? String(rowArray[invoiceNumberCol]).trim() : undefined;
+    const rawContactPerson = contactPersonCol !== -1 && rowArray[contactPersonCol] ? String(rowArray[contactPersonCol]).trim() : undefined;
 
     if (!piGroups[groupKey]) {
       piGroups[groupKey] = {
@@ -480,6 +483,7 @@ export async function parseExcelFile(
         paymentStatus,
         deliveryStatus,
         invoiceNumber: invNum,
+        contactPerson: rawContactPerson,
         standard,
         certBody,
         poReference,
@@ -503,6 +507,8 @@ export async function parseExcelFile(
 
     const group = piGroups[groupKey];
     group.allLines.push(rowArray);
+
+    if (rawContactPerson && !group.contactPerson) group.contactPerson = rawContactPerson;
 
     if (tcReqDate && !group.tcRequestDate) group.tcRequestDate = tcReqDate;
     if (recCommDate && !group.receivedCommercialDocDate) group.receivedCommercialDocDate = recCommDate;
@@ -586,6 +592,21 @@ export async function parseExcelFile(
       // Status is 100% automated: if no dates/fields are set, it is strictly 'Not Requested'
       const finalTcStatus = autoStatus;
 
+      // Determine deliveryStatus strictly based on delivery and balance quantities:
+      // If balance === 0 and delivered > 0 or order > 0 => DELIVERED!
+      // If balance > 0 and delivered > 0 => IN TRANSIT
+      // If balance > 0 and delivered === 0 => PENDING DISPATCH
+      let finalDeliveryStatus: DeliveryStatus = group.deliveryStatus || 'Pending Dispatch';
+      if (finalBalQ === 0 && (finalOrderQ > 0 || finalDelivQ > 0)) {
+        finalDeliveryStatus = 'Delivered';
+      } else if (finalBalQ > 0 && finalDelivQ > 0) {
+        finalDeliveryStatus = 'In Transit';
+      } else if (finalBalQ > 0 && finalDelivQ === 0) {
+        if (finalDeliveryStatus === 'Delivered') {
+          finalDeliveryStatus = 'Pending Dispatch';
+        }
+      }
+
       validOrders.push({
         id: `${group.piNumber}-${idx}`,
         piNumber: group.piNumber,
@@ -597,8 +618,9 @@ export async function parseExcelFile(
         tcCost: group.tcCostSum,
         paymentStatus: group.paymentStatus,
         expectedTcDate: group.expectedTcDate,
-        deliveryStatus: group.deliveryStatus,
+        deliveryStatus: finalDeliveryStatus,
         invoiceNumber: group.invoiceNumber || '',
+        contactPerson: group.contactPerson || 'System',
         standard: group.standard,
         certBody: group.certBody,
         quantityPcs: finalOrderQ,
@@ -678,6 +700,20 @@ export function sanitizePidData(list: PIData[]): PIData[] {
       cleanBalQ = 0;
     }
 
+    // Determine cleanDeliveryStatus strictly based on cleanBalQ and cleanDelivQ:
+    let cleanDeliveryStatus: DeliveryStatus = item.deliveryStatus || 'Pending Dispatch';
+    if (cleanBalQ === 0 && (cleanOrderQ > 0 || cleanDelivQ > 0)) {
+      cleanDeliveryStatus = 'Delivered';
+    } else if (cleanBalQ > 0 && cleanDelivQ > 0) {
+      if (cleanDeliveryStatus === 'Pending Dispatch' || cleanDeliveryStatus === 'Delivered') {
+        cleanDeliveryStatus = 'In Transit';
+      }
+    } else if (cleanBalQ > 0 && cleanDelivQ === 0) {
+      if (cleanDeliveryStatus === 'Delivered') {
+        cleanDeliveryStatus = 'Pending Dispatch';
+      }
+    }
+
     // Sanitize Revision Qty: Must be a small revision count (0 to 20 times), NOT an order quantity (e.g. 39,085)
     let cleanRevQty = item.revisionQty !== undefined && item.revisionQty !== null ? Number(item.revisionQty) : 0;
     if (isNaN(cleanRevQty) || cleanRevQty > 20 || cleanRevQty < 0) {
@@ -691,8 +727,10 @@ export function sanitizePidData(list: PIData[]): PIData[] {
 
     return {
       ...item,
+      contactPerson: item.contactPerson || 'System',
       revisionQty: cleanRevQty,
       tcStatus: cleanTcStatus,
+      deliveryStatus: cleanDeliveryStatus,
       quantityPcs: cleanOrderQ,
       orderQuantity: cleanOrderQ,
       deliveryQuantity: cleanDelivQ,

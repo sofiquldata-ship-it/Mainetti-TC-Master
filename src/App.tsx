@@ -162,6 +162,7 @@ export default function App() {
     customer: 'All Customers',
     buyer: 'All Buyers',
     tcStatus: 'All Statuses',
+    deliveryStatus: 'All Delivery Statuses',
     searchQuery: '',
   });
 
@@ -175,6 +176,7 @@ export default function App() {
       customer: 'All Customers',
       buyer: 'All Buyers',
       tcStatus: 'All Statuses',
+      deliveryStatus: 'All Delivery Statuses',
       searchQuery: '',
     });
   };
@@ -250,6 +252,17 @@ export default function App() {
         if (filters.tcStatus === 'Pending') {
           if (item.tcStatus !== 'Pending' && item.tcStatus !== 'Under Review') return false;
         } else if (item.tcStatus !== filters.tcStatus) {
+          return false;
+        }
+      }
+
+      // Delivery Status filter
+      if (
+        filters.deliveryStatus &&
+        filters.deliveryStatus !== 'All Statuses' &&
+        filters.deliveryStatus !== 'All Delivery Statuses'
+      ) {
+        if (item.deliveryStatus !== filters.deliveryStatus) {
           return false;
         }
       }
@@ -414,6 +427,7 @@ export default function App() {
       'PI Number',
       'Buyer',
       'Customer',
+      'Contact Person',
       'Order Qty',
       'Delivery Qty',
       'Balance Qty',
@@ -458,6 +472,7 @@ export default function App() {
         `"${d.piNumber}"`,
         `"${d.buyer}"`,
         `"${d.customer}"`,
+        `"${d.contactPerson || 'System'}"`,
         orderQ,
         delivQ,
         balQ,
@@ -627,7 +642,16 @@ export default function App() {
                 <MonthlyCostTrendChart data={filteredData} />
 
                 {/* Order & Delivery Snapshot */}
-                <OrderDeliverySnapshot data={filteredData} />
+                <OrderDeliverySnapshot
+                  data={piList}
+                  onFilterDelivery={(status) =>
+                    handleFilterChange({
+                      deliveryStatus:
+                        filters.deliveryStatus === status ? 'All Delivery Statuses' : status,
+                    })
+                  }
+                  activeDeliveryFilter={filters.deliveryStatus}
+                />
               </div>
 
               {/* TC Pending Attention Table */}

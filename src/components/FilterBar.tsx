@@ -26,7 +26,18 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     filters.customer !== 'All Customers' ||
     filters.buyer !== 'All Buyers' ||
     filters.tcStatus !== 'All Statuses' ||
+    (filters.deliveryStatus && filters.deliveryStatus !== 'All Statuses' && filters.deliveryStatus !== 'All Delivery Statuses') ||
     filters.searchQuery.trim() !== '';
+
+  const deliveryStatusList = [
+    'All Delivery Statuses',
+    'Delivered',
+    'In Transit',
+    'Port Clearance',
+    'Dispatched',
+    'Production Complete',
+    'Pending Dispatch',
+  ];
 
   return (
     <div className="bg-white border border-slate-200 rounded-sm shadow-xs px-2.5 py-1.5 mb-3">
@@ -85,6 +96,23 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               {buyers.map((b) => (
                 <option key={b} value={b}>
                   {b}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Delivery Status Filter */}
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-sm px-2 py-0.5">
+            <Tag className="w-3.5 h-3.5 text-blue-900 shrink-0" />
+            <span className="text-[11px] font-medium text-slate-500 uppercase tracking-tight shrink-0">Delivery:</span>
+            <select
+              value={filters.deliveryStatus || 'All Delivery Statuses'}
+              onChange={(e) => onFilterChange({ deliveryStatus: e.target.value })}
+              className="text-xs bg-transparent font-semibold text-blue-900 focus:outline-hidden cursor-pointer max-w-[130px] truncate"
+            >
+              {deliveryStatusList.map((ds) => (
+                <option key={ds} value={ds}>
+                  {ds}
                 </option>
               ))}
             </select>

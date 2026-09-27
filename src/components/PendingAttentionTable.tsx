@@ -31,6 +31,7 @@ type SortField =
   | 'piNumber'
   | 'buyer'
   | 'customer'
+  | 'contactPerson'
   | 'orderQuantity'
   | 'deliveryQuantity'
   | 'balanceQuantity'
@@ -186,6 +187,7 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
           i.piNumber.toLowerCase().includes(q) ||
           i.buyer.toLowerCase().includes(q) ||
           i.customer.toLowerCase().includes(q) ||
+          (i.contactPerson && i.contactPerson.toLowerCase().includes(q)) ||
           i.standard.toLowerCase().includes(q) ||
           i.deliveryStatus.toLowerCase().includes(q) ||
           i.orderDate.toLowerCase().includes(q) ||
@@ -556,6 +558,17 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                 </div>
               </th>
 
+              {/* 4.5. CONTACT PERSON - FROZEN TOP */}
+              <th
+                onClick={() => handleSort('contactPerson')}
+                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Contact Person</span>
+                  {renderSortIcon('contactPerson')}
+                </div>
+              </th>
+
               {/* 5. ORDER QUANTITY - FROZEN TOP */}
               <th
                 onClick={() => handleSort('orderQuantity')}
@@ -816,6 +829,13 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                     {/* 4. CUSTOMER */}
                     <td className="py-2.5 px-3 text-slate-700 whitespace-nowrap border-r border-slate-100 truncate max-w-[180px]">
                       {pi.customer}
+                    </td>
+
+                    {/* 4.5. CONTACT PERSON */}
+                    <td className="py-2.5 px-3 font-medium text-slate-800 whitespace-nowrap border-r border-slate-100">
+                      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-xs text-[11px]">
+                        {pi.contactPerson || 'System'}
+                      </span>
                     </td>
 
                     {/* 5. ORDER QUANTITY */}

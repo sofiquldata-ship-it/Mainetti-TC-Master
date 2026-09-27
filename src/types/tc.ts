@@ -52,6 +52,7 @@ export interface PIData {
   factoryUnit: string;
   poReference: string;
   season: string;
+  contactPerson?: string;
   attentionReason?: string;
   notes?: string;
 
@@ -131,6 +132,7 @@ export interface FilterState {
   customer: string;
   buyer: string;
   tcStatus: string;
+  deliveryStatus: string;
   searchQuery: string;
 }
 
