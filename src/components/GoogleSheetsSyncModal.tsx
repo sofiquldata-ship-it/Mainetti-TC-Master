@@ -21,7 +21,7 @@ import {
   Database,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
-import { googleSignIn, googleSignOut } from '../utils/googleAuth';
+import { googleSignIn, googleSignOut, gisTokenClientSignIn } from '../utils/googleAuth';
 import {
   exportDataToGoogleSheets,
   syncDataToExistingSpreadsheet,
@@ -570,9 +570,80 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
           )}
 
           {errorMsg && (
-            <div className="p-2.5 bg-red-50 border border-red-200 rounded-sm text-xs text-red-700 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
-              <span>{errorMsg}</span>
+            <div className="space-y-2">
+              {errorMsg.includes('unauthorized-domain') ? (
+                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-sm text-xs text-amber-950 space-y-2.5">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-bold text-amber-900 uppercase text-[11px] tracking-wide">
+                        Vercel Domain Authorization Needed in Firebase
+                      </h4>
+                      <p className="text-slate-700 text-[11px] mt-0.5 leading-relaxed">
+                        Firebase blocks authentication from new Vercel domains until added to Authorized Domains.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white border border-amber-200 rounded p-2.5 space-y-2">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-semibold text-slate-700">Your Current Vercel Domain:</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(window.location.hostname);
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                        }}
+                        className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded text-slate-700 font-mono text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        {copied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-slate-600" />}
+                        <span>{copied ? 'Copied' : window.location.hostname}</span>
+                      </button>
+                    </div>
+
+                    <div className="text-[11px] text-slate-600 space-y-1 pt-1 border-t border-slate-100">
+                      <p className="font-semibold text-slate-800">Quick Fix Steps (1 minute):</p>
+                      <ol className="list-decimal list-inside space-y-0.5 text-slate-600 pl-1">
+                        <li>Go to <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer" className="text-blue-700 font-bold underline">Firebase Console</a></li>
+                        <li>Select project <span className="font-mono bg-slate-100 px-1 rounded text-slate-800 font-bold">gen-lang-client-0665362944</span></li>
+                        <li>Click <strong>Authentication</strong> ➔ <strong>Settings</strong> ➔ <strong>Authorized domains</strong></li>
+                        <li>Click <strong>Add Domain</strong> and paste: <span className="font-mono font-bold text-blue-900 bg-blue-50 px-1 rounded">{window.location.hostname}</span></li>
+                      </ol>
+                    </div>
+                  </div>
+
+                  {/* Alternative GIS Button */}
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setIsSigningIn(true);
+                        setErrorMsg(null);
+                        try {
+                          const res = await gisTokenClientSignIn();
+                          if (res) {
+                            onAuthSuccess(res.user, res.accessToken);
+                          }
+                        } catch (err: any) {
+                          setErrorMsg(err.message || 'Direct GIS sign-in failed');
+                        } finally {
+                          setIsSigningIn(false);
+                        }
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-[#0b1b3d] hover:bg-[#132c5e] text-white text-xs font-bold rounded-sm shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4 text-amber-300" />
+                      <span>Connect with Google GIS Client Directly (Bypass Domain Check)</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-2.5 bg-red-50 border border-red-200 rounded-sm text-xs text-red-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                  <span>{errorMsg}</span>
+                </div>
+              )}
             </div>
           )}
         </div>
