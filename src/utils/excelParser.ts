@@ -390,9 +390,6 @@ export async function parseExcelFile(
       lastSeenPiNumber = piNumber;
     }
 
-    // Normalized group key (case-insensitive & trimmed)
-    const groupKey = piNumber.toUpperCase();
-
     // Extract amount/cost from this row
     let rowAmount = 0;
     if (amountCol !== -1) {
@@ -448,6 +445,11 @@ export async function parseExcelFile(
     const rawPoRef = getCell(poRefCol, '');
     if (rawPoRef) lastSeenPoRef = rawPoRef;
     const poReference = rawPoRef || lastSeenPoRef || `PO-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    // Composite group key based strictly on PI Number + Customer
+    const normPi = piNumber.trim().toUpperCase();
+    const normCust = customer.trim().toUpperCase();
+    const groupKey = normCust ? `${normPi}||${normCust}` : normPi;
 
     const tcReqDate = tcRequestDateCol !== -1 && rowArray[tcRequestDateCol] ? parseDateValue(rowArray[tcRequestDateCol]) : undefined;
     const recCommDate = receivedCommDocCol !== -1 && rowArray[receivedCommDocCol] ? parseDateValue(rowArray[receivedCommDocCol]) : undefined;

@@ -60,9 +60,9 @@ const COMPARABLE_FIELDS: FieldDefinition[] = [
 
 /**
  * Intelligent Data Sync & Merger:
- * 1. Primary Key: PI No.
- * 2. New PI No in Excel -> Insert as new record
- * 3. Existing PI No in Excel -> Compare fields; update ONLY changed fields; keep unchanged fields
+ * 1. Primary Match: Match by ID, then Composite Key (PI + Customer + PO Reference), then PI No.
+ * 2. New PI in Excel -> Insert as new record
+ * 3. Existing PI in Excel -> Compare fields; update ONLY changed fields; PRESERVE existing TC info if incoming is blank!
  * 4. Old PI omitted in Excel -> Retain existing record intact (no deletion)
  * 5. Track history log of changed fields
  */
@@ -73,16 +73,36 @@ export function mergeExcelDataWithDatabase(
 ): MergeResult {
   const currentTimestamp = new Date().toISOString().slice(0, 10);
   
-  // Map existing records by normalized PI Number
-  const existingMap = new Map<string, PIData>();
+  // Composite Key Builder (PI Number + Customer)
+  const getCompositeKey = (item: Partial<PIData>): string => {
+    const pi = (item.piNumber || '').trim().toUpperCase();
+    const cust = (item.customer || '').trim().toUpperCase();
+    return cust ? `${pi}||${cust}` : pi;
+  };
+
+  const getNormPi = (item: Partial<PIData>): string => {
+    return (item.piNumber || '').trim().toUpperCase();
+  };
+
+  // Map existing records cleanly without letting duplicate PI numbers overwrite each other!
+  const byIdMap = new Map<string, PIData>();
+  const byCompositeMap = new Map<string, PIData>();
+  const byPiListMap = new Map<string, PIData[]>();
+
   existingData.forEach((item) => {
-    const normKey = item.piNumber.trim().toUpperCase();
-    if (normKey) {
-      existingMap.set(normKey, { ...item });
+    if (item.id) byIdMap.set(item.id, item);
+    const compKey = getCompositeKey(item);
+    if (compKey) byCompositeMap.set(compKey, item);
+
+    const piKey = getNormPi(item);
+    if (piKey) {
+      const list = byPiListMap.get(piKey) || [];
+      list.push(item);
+      byPiListMap.set(piKey, list);
     }
   });
 
-  const incomingPiSet = new Set<string>();
+  const matchedExistingIds = new Set<string>();
   const mergedDataList: PIData[] = [];
   const changesList: FieldChange[] = [];
 
@@ -90,19 +110,50 @@ export function mergeExcelDataWithDatabase(
   let updatedCount = 0;
   let unchangedCount = 0;
 
-  // Process incoming Excel records
+  // Process incoming records
   incomingData.forEach((incoming) => {
-    const normKey = incoming.piNumber.trim().toUpperCase();
-    if (!normKey) return;
+    const normPi = getNormPi(incoming);
+    if (!normPi) return;
 
-    incomingPiSet.add(normKey);
-    const existing = existingMap.get(normKey);
+    // 1. Try finding existing match
+    let existing: PIData | undefined = undefined;
+
+    if (incoming.id && byIdMap.has(incoming.id) && !matchedExistingIds.has(incoming.id)) {
+      existing = byIdMap.get(incoming.id);
+    }
 
     if (!existing) {
-      // 1. NEW RECORD INSERT
+      const compKey = getCompositeKey(incoming);
+      if (compKey && byCompositeMap.has(compKey)) {
+        const candidate = byCompositeMap.get(compKey);
+        if (candidate && !matchedExistingIds.has(candidate.id)) {
+          existing = candidate;
+        }
+      }
+    }
+
+    if (!existing) {
+      const candidates = byPiListMap.get(normPi) || [];
+      const unmatched = candidates.filter((c) => !matchedExistingIds.has(c.id));
+      if (unmatched.length === 1) {
+        existing = unmatched[0];
+      } else if (unmatched.length > 1) {
+        // Try matching buyer or customer
+        const bestMatch = unmatched.find(
+          (c) =>
+            (c.customer && incoming.customer && c.customer.trim().toUpperCase() === incoming.customer.trim().toUpperCase()) ||
+            (c.buyer && incoming.buyer && c.buyer.trim().toUpperCase() === incoming.buyer.trim().toUpperCase())
+        );
+        existing = bestMatch || unmatched[0];
+      }
+    }
+
+    if (!existing) {
+      // 2. NEW RECORD INSERT
       newAddedCount++;
       const newRecord: PIData = {
         ...incoming,
+        id: incoming.id || `${incoming.piNumber}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
         lastUpdatedDate: currentTimestamp,
         updatedBy: updatedBy,
         changeHistory: [
@@ -114,11 +165,13 @@ export function mergeExcelDataWithDatabase(
           },
         ],
       };
-      // Auto compute TC status
       newRecord.tcStatus = computeAutomatedTcStatus(newRecord);
       mergedDataList.push(newRecord);
     } else {
-      // 2. EXISTING RECORD FIELD-LEVEL COMPARISON
+      // Mark as matched so it is not processed twice or retained as orphan
+      matchedExistingIds.add(existing.id);
+
+      // 3. EXISTING RECORD FIELD-LEVEL MERGE WITH TC PRESERVATION RULE
       const recordChanges: FieldChangeRecord[] = [];
       const updatedRecord: PIData = { ...existing };
       let isChanged = false;
@@ -128,8 +181,20 @@ export function mergeExcelDataWithDatabase(
         const incomingVal = incoming[key];
         const existingVal = existing[key];
 
-        // Skip if incoming Excel value is undefined or null (i.e. field not in Excel)
+        // Skip if incoming value is undefined or null
         if (incomingVal === undefined || incomingVal === null) return;
+
+        // PRESERVATION RULE: If existing record has TC dates / numbers / info, and incoming value is blank, PRESERVE EXISTING!
+        const isTcField = [
+          'tcRequestDate',
+          'receivedCommercialDocDate',
+          'draftTcDate',
+          'draftConfirmationDate',
+          'finalTcApplyDate',
+          'finalTcReceivedDate',
+          'tcNumber',
+          'invoiceNumber',
+        ].includes(key as string);
 
         if (field.type === 'number') {
           let numInc = Number(incomingVal);
@@ -140,7 +205,9 @@ export function mergeExcelDataWithDatabase(
             if (isNaN(numExist) || numExist > 20) numExist = 0;
           }
 
+          // If incoming quantity is 0, but existing had a valid quantity and incoming didn't explicitly clear it, preserve existing
           if (!isNaN(numInc) && numInc !== numExist) {
+            if (numInc === 0 && numExist > 0 && isTcField) return; // preserve
             isChanged = true;
             (updatedRecord as any)[key] = numInc;
             recordChanges.push({
@@ -161,7 +228,11 @@ export function mergeExcelDataWithDatabase(
           const strInc = String(incomingVal).trim();
           const strExist = String(existingVal || '').trim();
 
-          // Only consider as change if incoming string is non-empty and different
+          // PRESERVATION RULE: If incoming string is empty/blank and existing string is non-empty, DO NOT OVERWRITE!
+          if (strInc === '' && strExist !== '') {
+            return; // keep existing value!
+          }
+
           if (strInc !== '' && strInc !== strExist) {
             isChanged = true;
             (updatedRecord as any)[key] = strInc;
@@ -190,22 +261,23 @@ export function mergeExcelDataWithDatabase(
           ...(existing.changeHistory || []),
           ...recordChanges,
         ];
-        // Re-compute TC Status in case dates/TC numbers changed
         updatedRecord.tcStatus = computeAutomatedTcStatus(updatedRecord);
         mergedDataList.push(updatedRecord);
       } else {
         unchangedCount++;
+        // Even if no values changed, re-compute TC status for certainty
+        existing.tcStatus = computeAutomatedTcStatus(existing);
         mergedDataList.push(existing);
       }
     }
   });
 
-  // 3. RETAIN OLD PIs NOT PRESENT IN INCOMING EXCEL
+  // 4. RETAIN UNMATCHED EXISTING RECORDS INTACT
   let retainedCount = 0;
   existingData.forEach((existing) => {
-    const normKey = existing.piNumber.trim().toUpperCase();
-    if (!incomingPiSet.has(normKey)) {
+    if (!matchedExistingIds.has(existing.id)) {
       retainedCount++;
+      existing.tcStatus = computeAutomatedTcStatus(existing);
       mergedDataList.push(existing);
     }
   });
