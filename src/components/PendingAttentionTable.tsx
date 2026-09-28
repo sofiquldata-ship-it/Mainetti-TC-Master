@@ -433,12 +433,6 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
             </button>
           </div>
 
-          {/* Frozen Info Pill */}
-          <div className="hidden lg:flex items-center gap-1 px-2 py-1 bg-blue-50/70 border border-blue-200 text-blue-900 rounded-sm text-[10px] font-medium">
-            <Pin className="w-3 h-3 text-blue-700" />
-            <span>Frozen: Date, PI No & Last Column (TC Status)</span>
-          </div>
-
           {/* In-Table Search */}
           <div className="relative">
             <input
