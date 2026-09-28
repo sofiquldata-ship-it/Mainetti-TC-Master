@@ -181,23 +181,25 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
     }
 
     if (tableSearch.trim()) {
-      const q = tableSearch.toLowerCase();
+      const q = tableSearch.toLowerCase().trim();
       list = list.filter(
         (i) =>
-          i.piNumber.toLowerCase().includes(q) ||
-          i.buyer.toLowerCase().includes(q) ||
-          i.customer.toLowerCase().includes(q) ||
-          (i.contactPerson && i.contactPerson.toLowerCase().includes(q)) ||
-          i.standard.toLowerCase().includes(q) ||
-          i.deliveryStatus.toLowerCase().includes(q) ||
-          i.orderDate.toLowerCase().includes(q) ||
+          (i.piNumber && i.piNumber.toLowerCase().includes(q)) ||
+          (i.invoiceNumber && i.invoiceNumber.toLowerCase().includes(q)) ||
           (i.tcNumber && i.tcNumber.toLowerCase().includes(q)) ||
+          (i.buyer && i.buyer.toLowerCase().includes(q)) ||
+          (i.customer && i.customer.toLowerCase().includes(q)) ||
+          (i.contactPerson && i.contactPerson.toLowerCase().includes(q)) ||
+          (i.standard && i.standard.toLowerCase().includes(q)) ||
+          (i.deliveryStatus && i.deliveryStatus.toLowerCase().includes(q)) ||
+          (i.orderDate && i.orderDate.toLowerCase().includes(q)) ||
           (i.tcRequestDate && i.tcRequestDate.toLowerCase().includes(q)) ||
           (i.receivedCommercialDocDate && i.receivedCommercialDocDate.toLowerCase().includes(q)) ||
           (i.draftTcDate && i.draftTcDate.toLowerCase().includes(q)) ||
           (i.draftConfirmationDate && i.draftConfirmationDate.toLowerCase().includes(q)) ||
           (i.finalTcApplyDate && i.finalTcApplyDate.toLowerCase().includes(q)) ||
-          (i.finalTcReceivedDate && i.finalTcReceivedDate.toLowerCase().includes(q))
+          (i.finalTcReceivedDate && i.finalTcReceivedDate.toLowerCase().includes(q)) ||
+          computeAutomatedTcStatus(i).toLowerCase().includes(q)
       );
     }
 
@@ -437,7 +439,7 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
           <div className="relative">
             <input
               type="text"
-              placeholder="Quick search table..."
+              placeholder="Search PI, Inv #, TC #..."
               value={tableSearch}
               onChange={(e) => setTableSearch(e.target.value)}
               className="py-1 px-2.5 text-xs bg-white border border-slate-300 rounded-sm focus:outline-none focus:ring-1 focus:ring-[#0b1b3d] w-36 sm:w-48"

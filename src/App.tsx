@@ -255,10 +255,33 @@ export default function App() {
 
       // TC Status filter
       if (filters.tcStatus !== 'All Statuses') {
+        const computed = computeAutomatedTcStatus(item);
+        const actualStatus = computed !== 'Not Requested' ? computed : (item.tcStatus || 'Not Requested');
+
         if (filters.tcStatus === 'Pending') {
-          if (item.tcStatus !== 'Pending' && item.tcStatus !== 'Under Review') return false;
-        } else if (item.tcStatus !== filters.tcStatus) {
-          return false;
+          if (
+            actualStatus === 'Not Requested' ||
+            actualStatus === 'Final TC Received' ||
+            actualStatus === 'Issued'
+          ) {
+            return false;
+          }
+        } else if (filters.tcStatus === 'Issued') {
+          if (actualStatus !== 'Final TC Received' && actualStatus !== 'Issued') {
+            return false;
+          }
+        } else if (filters.tcStatus === 'Required') {
+          if (actualStatus !== 'Not Requested' && actualStatus !== 'Required') {
+            return false;
+          }
+        } else {
+          if (
+            actualStatus !== filters.tcStatus &&
+            item.tcStatus !== filters.tcStatus &&
+            computed !== filters.tcStatus
+          ) {
+            return false;
+          }
         }
       }
 
@@ -275,15 +298,27 @@ export default function App() {
 
       // Global search
       if (filters.searchQuery.trim() !== '') {
-        const query = filters.searchQuery.toLowerCase();
+        const query = filters.searchQuery.toLowerCase().trim();
         const matches =
-          item.piNumber.toLowerCase().includes(query) ||
-          item.buyer.toLowerCase().includes(query) ||
-          item.customer.toLowerCase().includes(query) ||
-          item.standard.toLowerCase().includes(query) ||
-          item.certBody.toLowerCase().includes(query) ||
-          item.poReference.toLowerCase().includes(query) ||
-          item.deliveryStatus.toLowerCase().includes(query);
+          (item.piNumber && item.piNumber.toLowerCase().includes(query)) ||
+          (item.invoiceNumber && item.invoiceNumber.toLowerCase().includes(query)) ||
+          (item.tcNumber && item.tcNumber.toLowerCase().includes(query)) ||
+          (item.buyer && item.buyer.toLowerCase().includes(query)) ||
+          (item.customer && item.customer.toLowerCase().includes(query)) ||
+          (item.contactPerson && item.contactPerson.toLowerCase().includes(query)) ||
+          (item.standard && item.standard.toLowerCase().includes(query)) ||
+          (item.certBody && item.certBody.toLowerCase().includes(query)) ||
+          (item.poReference && item.poReference.toLowerCase().includes(query)) ||
+          (item.deliveryStatus && item.deliveryStatus.toLowerCase().includes(query)) ||
+          (item.productDescription && item.productDescription.toLowerCase().includes(query)) ||
+          (item.orderDate && item.orderDate.toLowerCase().includes(query)) ||
+          (item.tcRequestDate && item.tcRequestDate.toLowerCase().includes(query)) ||
+          (item.receivedCommercialDocDate && item.receivedCommercialDocDate.toLowerCase().includes(query)) ||
+          (item.draftTcDate && item.draftTcDate.toLowerCase().includes(query)) ||
+          (item.draftConfirmationDate && item.draftConfirmationDate.toLowerCase().includes(query)) ||
+          (item.finalTcApplyDate && item.finalTcApplyDate.toLowerCase().includes(query)) ||
+          (item.finalTcReceivedDate && item.finalTcReceivedDate.toLowerCase().includes(query)) ||
+          computeAutomatedTcStatus(item).toLowerCase().includes(query);
         if (!matches) return false;
       }
 

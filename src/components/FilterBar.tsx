@@ -163,7 +163,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search PI, Buyer..."
+              placeholder="Search PI, Inv #, TC #, Buyer..."
               value={filters.searchQuery}
               onChange={(e) => onFilterChange({ searchQuery: e.target.value })}
               className="w-full pl-7 pr-2 py-0.5 text-xs bg-slate-50 border border-slate-300 rounded-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:border-[#1e3a8a] focus:bg-white"

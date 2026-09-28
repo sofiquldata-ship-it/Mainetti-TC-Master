@@ -489,8 +489,13 @@ export const BUYER_LIST = [
 
 export const STATUS_LIST = [
   'All Statuses',
-  'Required',
-  'Pending',
-  'Issued',
+  'Not Requested',
+  'TC Requested',
+  'Commercial Doc Received',
+  'Draft TC Received',
+  'Draft Confirmed',
+  'Revision',
+  'Final TC Applied',
+  'Final TC Received',
   'Overdue',
 ];
