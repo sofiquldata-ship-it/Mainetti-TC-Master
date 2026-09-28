@@ -10,6 +10,7 @@ import { OrderDeliverySnapshot } from './components/OrderDeliverySnapshot';
 import { PendingAttentionTable } from './components/PendingAttentionTable';
 import { PiDetailDrawer } from './components/PiDetailDrawer';
 import { TcSummaryPageView } from './components/TcSummaryPageView';
+import { DocumentsView } from './components/DocumentsView';
 import { ExcelUploadView } from './components/ExcelUploadView';
 import { GoogleSheetsSyncModal } from './components/GoogleSheetsSyncModal';
 import {
@@ -621,6 +622,11 @@ export default function App() {
               onSelectBuyer={(buyer) => handleFilterChange({ buyer })}
               onSelectCustomer={(customer) => handleFilterChange({ customer })}
               onSaveToGoogleSheets={() => setIsGoogleSheetsModalOpen(true)}
+            />
+          ) : activeTab === 'Document' || activeTab === 'Documents' ? (
+            <DocumentsView
+              data={piList}
+              onSelectPI={(pi) => setSelectedPi(pi)}
             />
           ) : activeTab === 'TC Master' ? (
             /* Dedicated TC Master Page: Just Filter Bar + PI Table */

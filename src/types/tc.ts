@@ -29,6 +29,22 @@ export interface FieldChangeRecord {
   newValue: any;
 }
 
+export interface PIProductItem {
+  id: string;
+  slNo?: number;
+  styleNo: string;
+  modelProduct: string;
+  width?: string | number;
+  length?: string | number;
+  gusset?: string | number;
+  flap?: string | number;
+  orderQty: number;
+  deliveryQty: number;
+  pktBox?: string | number;
+  balanceQty?: string | number;
+  piNumber?: string;
+}
+
 export interface PIData {
   id: string;
   piNumber: string;
@@ -55,6 +71,7 @@ export interface PIData {
   contactPerson?: string;
   attentionReason?: string;
   notes?: string;
+  productItems?: PIProductItem[];
 
   // New TC-Related Workflow Fields
   tcRequestDate?: string;

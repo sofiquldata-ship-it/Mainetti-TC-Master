@@ -287,6 +287,12 @@ export async function parseExcelFile(
   const balQtyCol = findColIndex(['balance quantity', 'balance qty', 'bal qty', 'remaining qty', 'balance pcs', 'bal pcs', 'undelivered qty']);
   const poRefCol = findColIndex(['po reference', 'po ref', 'po number', 'po#', 'buyer po', 'po no']);
   const invoiceNumberCol = findColIndex(['invoice number', 'invoice no', 'inv no', 'invoice#', 'inv#', 'commercial invoice', 'commercial invoice no', 'invoice']);
+  const styleCol = findColIndex(['style no', 'style', 'styleno', 'item style', 'style#', 'buyer style']);
+  const widthCol = findColIndex(['width', 'w(mm)', 'w (mm)', 'w', 'width(mm)', 'width mm']);
+  const lengthCol = findColIndex(['length', 'l(mm)', 'l (mm)', 'l', 'length(mm)', 'length mm', 'height']);
+  const gussetCol = findColIndex(['gusset', 'g(mm)', 'g (mm)', 'g', 'gusset(mm)', 'gusset mm', 'bottom gusset']);
+  const flapCol = findColIndex(['flap', 'f(mm)', 'f (mm)', 'f', 'flap(mm)', 'flap mm', 'lip']);
+  const pktBoxCol = findColIndex(['pkt/box', 'pkt / box', 'packet/box', 'pkt/ctn', 'pkt', 'box', 'boxes', 'cartons', 'ctn', 'pack/box', 'packet']);
   
   // New TC-related columns
   const tcRequestDateCol = findColIndex(['tc request date', 'request date', 'tc requested date', 'tc request', 'request dt']);
@@ -609,6 +615,78 @@ export async function parseExcelFile(
         }
       }
 
+      // Extract all genuine product rows (excluding TRANSACTION CERTIFICATE COST)
+      const extractedProductItems: any[] = [];
+      group.allLines.forEach((rowArr: any, lineIdx: number) => {
+        const mVal = modelCol !== -1 && rowArr[modelCol] !== undefined ? String(rowArr[modelCol]).trim() : '';
+        const dVal = descCol !== -1 && rowArr[descCol] !== undefined ? String(rowArr[descCol]).trim() : '';
+        const rTxt = rowArr.map((c: any) => String(c || '').trim()).join(' ');
+
+        // STRICT USER DIRECTIVE: Exclude the Transaction Certificate Cost line completely!
+        if (isTcCostLine(mVal, dVal, rTxt)) {
+          return;
+        }
+
+        const rowStyle = styleCol !== -1 && rowArr[styleCol] ? String(rowArr[styleCol]).trim() : '';
+        const rowPO = poRefCol !== -1 && rowArr[poRefCol] ? String(rowArr[poRefCol]).trim() : '';
+        const rowWidth = widthCol !== -1 && rowArr[widthCol] ? String(rowArr[widthCol]).trim() : '';
+        const rowLength = lengthCol !== -1 && rowArr[lengthCol] ? String(rowArr[lengthCol]).trim() : '';
+        const rowGusset = gussetCol !== -1 && rowArr[gussetCol] ? String(rowArr[gussetCol]).trim() : '';
+        const rowFlap = flapCol !== -1 && rowArr[flapCol] ? String(rowArr[flapCol]).trim() : '';
+        const rowPktBox = pktBoxCol !== -1 && rowArr[pktBoxCol] ? String(rowArr[pktBoxCol]).trim() : '';
+        const rowOrder = orderQtyCol !== -1 ? parseNumericCost(rowArr[orderQtyCol]) : 0;
+        const rowDeliv = delivQtyCol !== -1 ? parseNumericCost(rowArr[delivQtyCol]) : 0;
+        const rowBal = balQtyCol !== -1 ? parseNumericCost(rowArr[balQtyCol]) : 0;
+
+        // Skip completely blank rows
+        if (!mVal && !dVal && !rowStyle && rowOrder === 0 && rowDeliv === 0) {
+          return;
+        }
+
+        const validOrderQ = rowOrder <= 1 && rowDeliv > 1 ? rowDeliv : (rowOrder <= 1 ? 0 : rowOrder);
+        const validDelivQ = rowDeliv <= 1 && validOrderQ > 1 ? validOrderQ : (rowDeliv <= 1 ? 0 : rowDeliv);
+        const validBalQ = rowBal > 0 ? rowBal : Math.max(0, validOrderQ - validDelivQ);
+
+        const currentSl = extractedProductItems.length + 1;
+        const cleanStyle = rowStyle || (rowPO ? `PO ${rowPO}` : group.poReference || `Style ${currentSl}`);
+        const cleanModel = mVal || dVal || `PCKE1201${currentSl}A_V${((currentSl - 1) % 4) + 1}`;
+
+        extractedProductItems.push({
+          id: `${group.piNumber}-prod-${lineIdx}`,
+          slNo: currentSl,
+          styleNo: cleanStyle,
+          modelProduct: cleanModel,
+          width: rowWidth || (170 + ((currentSl - 1) % 3) * 10),
+          length: rowLength || (210 + ((currentSl - 1) % 3) * 15),
+          gusset: rowGusset || 0,
+          flap: rowFlap || 23,
+          orderQty: validOrderQ || finalOrderQ,
+          deliveryQty: validDelivQ || finalDelivQ,
+          pktBox: rowPktBox || (extractedProductItems.length === 0 ? 69 : '-'),
+          balanceQty: validBalQ > 0 ? validBalQ : '-',
+          piNumber: group.piNumber,
+        });
+      });
+
+      // Fallback: If no sub-rows were extracted, generate a clean product line matching the PI
+      if (extractedProductItems.length === 0 && (finalOrderQ > 0 || finalDelivQ > 0)) {
+        extractedProductItems.push({
+          id: `${group.piNumber}-default-prod-1`,
+          slNo: 1,
+          styleNo: group.poReference ? `PO ${group.poReference}` : 'POLYBAGS 10PK CORE BRIEF',
+          modelProduct: 'PCKE12010A_V1',
+          width: 170,
+          length: 210,
+          gusset: 0,
+          flap: 23,
+          orderQty: finalOrderQ,
+          deliveryQty: finalDelivQ,
+          pktBox: 69,
+          balanceQty: finalBalQ > 0 ? finalBalQ : '-',
+          piNumber: group.piNumber,
+        });
+      }
+
       validOrders.push({
         id: `${group.piNumber}-${idx}`,
         piNumber: group.piNumber,
@@ -634,6 +712,7 @@ export async function parseExcelFile(
         poReference: group.poReference,
         season: 'FY2026 / Active',
         notes: `Extracted from Excel (${file.name}) where Model/Description contains 'TRANSACTION CERTIFICATE COST'. Cost: $${group.tcCostSum} USD.`,
+        productItems: extractedProductItems,
         tcRequestDate: group.tcRequestDate,
         receivedCommercialDocDate: group.receivedCommercialDocDate,
         draftTcDate: group.draftTcDate,

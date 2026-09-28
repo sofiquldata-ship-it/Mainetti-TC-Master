@@ -8,6 +8,7 @@ import {
   Download,
   RefreshCw,
   PanelLeftClose,
+  FileText,
 } from 'lucide-react';
 import { UploadedFileInfo } from '../types/tc';
 
@@ -61,6 +62,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Executive Summary',
       icon: BarChart3,
       badge: null,
+    },
+    {
+      id: 'Document',
+      label: 'Document',
+      icon: FileText,
+      badge: 'PDF',
+      badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/30 font-semibold',
     },
     {
       id: 'Excel Upload',
