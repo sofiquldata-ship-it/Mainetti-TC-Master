@@ -36,6 +36,8 @@ export default function App() {
     if (saved.data && saved.data.length > 0) {
       return saved.data.map((item) => ({
         ...item,
+        invoiceNumber: item.invoiceNumber || (item.piNumber ? `INV-${item.piNumber.replace(/^(PI-|PI\b)/i, '')}` : ''),
+        contactPerson: item.contactPerson || 'System',
         tcStatus: computeAutomatedTcStatus(item),
       }));
     }
@@ -90,6 +92,8 @@ export default function App() {
       if (cloudPiList && cloudPiList.length > 0) {
         const cleaned = cloudPiList.map((item) => ({
           ...item,
+          invoiceNumber: item.invoiceNumber || (item.piNumber ? `INV-${item.piNumber.replace(/^(PI-|PI\b)/i, '')}` : ''),
+          contactPerson: item.contactPerson || 'System',
           tcStatus: computeAutomatedTcStatus(item),
         }));
         setPiList(cleaned);
@@ -109,6 +113,8 @@ export default function App() {
         setPiList(
           saved.data.map((item) => ({
             ...item,
+            invoiceNumber: item.invoiceNumber || (item.piNumber ? `INV-${item.piNumber.replace(/^(PI-|PI\b)/i, '')}` : ''),
+            contactPerson: item.contactPerson || 'System',
             tcStatus: computeAutomatedTcStatus(item),
           }))
         );
