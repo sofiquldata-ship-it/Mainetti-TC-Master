@@ -535,16 +535,24 @@ export const PiDetailDrawer: React.FC<PiDetailDrawerProps> = ({
           <button
             type="button"
             onClick={() => {
-              applyWorkflowUpdate({});
-              setActionSuccess('Changes saved & status updated successfully!');
-              setTimeout(() => {
-                setActionSuccess(null);
-              }, 2500);
+              applyWorkflowUpdate({
+                invoiceNumber: invoiceNo || undefined,
+                tcRequestDate: tcReqDate || undefined,
+                receivedCommercialDocDate: recCommDocDate || undefined,
+                draftTcDate: draftTcDate || undefined,
+                draftConfirmationDate: draftConfDate || undefined,
+                revisionQty: revQty ? Number(revQty) : undefined,
+                finalTcApplyDate: finalApplyDate || undefined,
+                finalTcReceivedDate: finalRecDate || undefined,
+                tcNumber: tcNum || undefined,
+                notes: notes || undefined,
+              });
+              onClose();
             }}
             className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-sm shadow-xs transition-colors cursor-pointer"
           >
             <Check className="w-4 h-4 text-emerald-200" />
-            <span>Save Changes</span>
+            <span>Save & Close</span>
           </button>
         </div>
       </div>
