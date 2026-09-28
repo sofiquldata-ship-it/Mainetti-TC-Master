@@ -2,7 +2,6 @@ import React from 'react';
 import {
   Layers,
   LayoutDashboard,
-  Building2,
   UploadCloud,
   BarChart3,
   Table,
@@ -86,9 +85,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }`}
       >
         {/* Brand Header */}
-        <div className="p-4 border-b border-[#142647] bg-[#061024]">
-          <div className="flex items-center gap-3">
-            <div className="bg-[#1e3a8a] text-white p-2 rounded-sm border border-blue-400/30 flex items-center justify-center shadow-inner">
+        <div className="p-3.5 border-b border-[#142647] bg-[#061024]">
+          <div className="flex items-center gap-2.5">
+            <div className="bg-[#1e3a8a] text-white p-1.5 rounded-sm border border-blue-400/30 flex items-center justify-center shadow-inner">
               <Layers className="w-5 h-5 text-blue-200" />
             </div>
             <div className="flex flex-col min-w-0">
@@ -101,27 +100,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="text-[11px] font-semibold text-blue-200 uppercase tracking-tight truncate">
                 TC Management Console
               </span>
-              <span className="text-[9px] text-slate-400 font-mono tracking-tighter truncate">
-                Apparel Sourcing & Compliance
-              </span>
             </div>
           </div>
         </div>
 
-        {/* Operational Scope Marker */}
-        <div className="px-4 py-2 bg-[#0a1b38] border-b border-[#142647] flex items-center justify-between text-[11px] text-slate-300">
-          <div className="flex items-center gap-1.5">
-            <Building2 className="w-3.5 h-3.5 text-blue-300" />
-            <span className="font-medium text-slate-200">Global Hub · EPZ</span>
-          </div>
-          <span className="text-[10px] font-mono bg-[#162c54] text-blue-200 px-1.5 py-0.5 rounded-xs">
-            v2026.4
-          </span>
-        </div>
-
         {/* Navigation Options List */}
-        <div className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
-          <div className="px-3 pb-1.5 text-[10px] font-bold font-mono uppercase tracking-wider text-slate-400">
+        <div className="flex-1 overflow-y-auto py-2 px-2 space-y-1">
+          <div className="px-3 pb-1 text-[10px] font-bold font-mono uppercase tracking-wider text-slate-400">
             Main Operations
           </div>
 
@@ -151,17 +136,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   />
                   <span className="truncate">{item.label}</span>
                 </div>
-
-                {item.badge && (
-                  <span
-                    className={`text-[10px] font-mono px-1.5 py-0.2 rounded-xs border ${
-                      item.badgeColor ||
-                      'bg-slate-800 text-slate-300 border-slate-700'
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
               </button>
             );
           })}

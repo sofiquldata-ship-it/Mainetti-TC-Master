@@ -343,13 +343,13 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
       )}
 
       {/* Table Sub-Header Controls */}
-      <div className="px-2.5 py-1.5 border-b border-slate-200 bg-slate-50/70 flex items-center justify-between gap-2 overflow-x-auto scrollbar-none">
+      <div className="px-2 py-1 border-b border-slate-200 bg-slate-50/70 flex items-center justify-between gap-1.5 overflow-x-auto scrollbar-none">
         {/* Left: View Tabs */}
-        <div className="flex items-center gap-1 bg-slate-200/70 p-1 rounded-sm shrink-0">
+        <div className="flex items-center gap-1 bg-slate-200/70 p-0.5 rounded-sm shrink-0">
           <button
             type="button"
             onClick={() => setViewMode('all')}
-            className={`px-3 py-1 text-xs font-semibold rounded-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
+            className={`px-2 py-0.5 text-xs font-semibold rounded-xs transition-colors cursor-pointer flex items-center gap-1 ${
               viewMode === 'all'
                 ? 'bg-white text-[#0b1b3d] shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -364,13 +364,13 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
           <button
             type="button"
             onClick={() => setViewMode('attention')}
-            className={`px-3 py-1 text-xs font-semibold rounded-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
+            className={`px-2 py-0.5 text-xs font-semibold rounded-xs transition-colors cursor-pointer flex items-center gap-1 ${
               viewMode === 'attention'
                 ? 'bg-white text-[#0b1b3d] shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Clock className="w-3.5 h-3.5 text-amber-600" />
+            <Clock className="w-3 h-3 text-amber-600" />
             <span>TC In Progress</span>
             <span className="font-mono text-[10px] bg-amber-100 text-amber-900 px-1 rounded-xs">
               {inProgressCount}
@@ -380,13 +380,13 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
           <button
             type="button"
             onClick={() => setViewMode('completed')}
-            className={`px-3 py-1 text-xs font-semibold rounded-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
+            className={`px-2 py-0.5 text-xs font-semibold rounded-xs transition-colors cursor-pointer flex items-center gap-1 ${
               viewMode === 'completed'
                 ? 'bg-white text-[#0b1b3d] shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
             <span>Final TC Received</span>
             <span className="font-mono text-[10px] bg-emerald-100 text-emerald-900 px-1 rounded-xs">
               {completedCount}
@@ -395,43 +395,43 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
         </div>
 
         {/* Right Controls: Scroll Bar Helpers + Search + Export */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           {/* Scroll Navigation Toolbar */}
-          <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-sm p-0.5 shadow-2xs">
+          <div className="flex items-center gap-0.5 bg-white border border-slate-300 rounded-sm p-0.5 shadow-2xs">
             <button
               type="button"
               onClick={() => handleScroll('start')}
-              className="p-1 text-slate-600 hover:text-[#0b1b3d] hover:bg-slate-100 rounded-xs transition-colors cursor-pointer"
+              className="p-0.5 text-slate-600 hover:text-[#0b1b3d] hover:bg-slate-100 rounded-xs transition-colors cursor-pointer"
               title="Scroll to Start (Left)"
             >
-              <ChevronsLeft className="w-3.5 h-3.5" />
+              <ChevronsLeft className="w-3 h-3" />
             </button>
             <button
               type="button"
               onClick={() => handleScroll('left')}
-              className="p-1 text-slate-600 hover:text-[#0b1b3d] hover:bg-slate-100 rounded-xs transition-colors cursor-pointer flex items-center gap-0.5 text-[10px] font-semibold px-1.5"
+              className="p-0.5 text-slate-600 hover:text-[#0b1b3d] hover:bg-slate-100 rounded-xs transition-colors cursor-pointer flex items-center gap-0.5 text-[10px] font-semibold px-1"
               title="Scroll Left"
             >
-              <ChevronLeft className="w-3.5 h-3.5" />
+              <ChevronLeft className="w-3 h-3" />
               <span className="hidden xl:inline">Scroll Left</span>
             </button>
             <div className="h-3 w-px bg-slate-200 mx-0.5" />
             <button
               type="button"
               onClick={() => handleScroll('right')}
-              className="p-1 text-slate-600 hover:text-[#0b1b3d] hover:bg-slate-100 rounded-xs transition-colors cursor-pointer flex items-center gap-0.5 text-[10px] font-semibold px-1.5"
+              className="p-0.5 text-slate-600 hover:text-[#0b1b3d] hover:bg-slate-100 rounded-xs transition-colors cursor-pointer flex items-center gap-0.5 text-[10px] font-semibold px-1"
               title="Scroll Right"
             >
               <span className="hidden xl:inline">Scroll Right</span>
-              <ChevronRight className="w-3.5 h-3.5" />
+              <ChevronRight className="w-3 h-3" />
             </button>
             <button
               type="button"
               onClick={() => handleScroll('end')}
-              className="p-1 text-slate-600 hover:text-[#0b1b3d] hover:bg-slate-100 rounded-xs transition-colors cursor-pointer"
+              className="p-0.5 text-slate-600 hover:text-[#0b1b3d] hover:bg-slate-100 rounded-xs transition-colors cursor-pointer"
               title="Scroll to End (Right / TC Status)"
             >
-              <ChevronsRight className="w-3.5 h-3.5" />
+              <ChevronsRight className="w-3 h-3" />
             </button>
           </div>
 
@@ -442,13 +442,13 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               placeholder="Search PI, Inv #, TC #..."
               value={tableSearch}
               onChange={(e) => setTableSearch(e.target.value)}
-              className="py-1 px-2.5 text-xs bg-white border border-slate-300 rounded-sm focus:outline-none focus:ring-1 focus:ring-[#0b1b3d] w-36 sm:w-48"
+              className="py-0.5 px-2 text-xs bg-white border border-slate-300 rounded-sm focus:outline-none focus:ring-1 focus:ring-[#0b1b3d] w-36 sm:w-44"
             />
             {tableSearch && (
               <button
                 type="button"
                 onClick={() => setTableSearch('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
               >
                 ✕
               </button>
@@ -459,10 +459,10 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
             <button
               type="button"
               onClick={onSaveToGoogleSheets}
-              className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-sm shadow-2xs transition-colors cursor-pointer"
+              className="flex items-center gap-1 px-2 py-0.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-sm shadow-2xs transition-colors cursor-pointer"
               title="Save & Sync to Google Sheets"
             >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
+              <FileSpreadsheet className="w-3 h-3 text-emerald-700" />
               <span className="hidden sm:inline">Google Sheets</span>
             </button>
           )}
@@ -471,7 +471,7 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
             <button
               type="button"
               onClick={onExport}
-              className="flex items-center gap-1 px-2 py-1 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-sm transition-colors cursor-pointer"
+              className="flex items-center gap-1 px-1.5 py-0.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-sm transition-colors cursor-pointer"
               title="Export CSV"
             >
               <span>CSV</span>
@@ -483,13 +483,13 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
       {/* Main Table View with Scrollbar & Frozen Headers + Frozen Columns (Left: Date, PI No | Right: TC Status) */}
       <div
         ref={tableContainerRef}
-        className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-260px)] min-h-[480px] table-scrollbar relative border-b border-slate-200"
+        className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-220px)] min-h-[480px] table-scrollbar relative border-b border-slate-200"
       >
         <table className="w-full text-left border-collapse min-w-[1780px]">
           <thead className="sticky top-0 z-30 shadow-[0_2px_4px_rgba(0,0,0,0.15)]">
-            <tr className="bg-[#0b1b3d] text-white text-[11px] font-bold uppercase tracking-wider select-none">
+            <tr className="bg-[#0b1b3d] text-white text-[10px] font-bold uppercase tracking-wider select-none">
               {/* 0. CHECKBOX - FROZEN TOP & LEFT */}
-              <th className="py-2.5 px-2 text-center border-r border-[#1a386b] whitespace-nowrap sticky top-0 left-0 z-40 bg-[#0b1b3d] w-9 shadow-[2px_2px_4px_-1px_rgba(0,0,0,0.25)]">
+              <th className="py-1.5 px-2 text-center border-r border-[#1a386b] whitespace-nowrap sticky top-0 left-0 z-40 bg-[#0b1b3d] w-9 shadow-[2px_2px_4px_-1px_rgba(0,0,0,0.25)]">
                 <input
                   type="checkbox"
                   checked={isAllSelected}
@@ -502,9 +502,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 1. ORDER DATE - FROZEN TOP & LEFT */}
               <th
                 onClick={() => handleSort('orderDate')}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 left-[36px] z-40 bg-[#0b1b3d] shadow-[2px_2px_4px_-1px_rgba(0,0,0,0.25)]"
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 left-[36px] z-40 bg-[#0b1b3d] shadow-[2px_2px_4px_-1px_rgba(0,0,0,0.25)]"
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <span>Order Date</span>
                   {renderSortIcon('orderDate')}
                 </div>
@@ -513,9 +513,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 2. AGE (DAYS) - FROZEN TOP & LEFT */}
               <th
                 onClick={() => handleSort('piAgeDays')}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-center sticky top-0 left-[141px] z-40 bg-[#0b1b3d] shadow-[2px_2px_4px_-1px_rgba(0,0,0,0.25)]"
+                className="py-1.5 px-2 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-center sticky top-0 left-[125px] z-40 bg-[#0b1b3d] shadow-[2px_2px_4px_-1px_rgba(0,0,0,0.25)]"
               >
-                <div className="flex items-center justify-center gap-1.5">
+                <div className="flex items-center justify-center gap-1">
                   <span>Age (Days)</span>
                   {renderSortIcon('piAgeDays')}
                 </div>
@@ -524,9 +524,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 3. PI NO - FROZEN TOP & LEFT */}
               <th
                 onClick={() => handleSort('piNumber')}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 left-[231px] z-40 bg-[#0b1b3d] shadow-[4px_2px_6px_-2px_rgba(0,0,0,0.25)]"
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 left-[205px] z-40 bg-[#0b1b3d] shadow-[4px_2px_6px_-2px_rgba(0,0,0,0.25)]"
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <span>PI No</span>
                   {renderSortIcon('piNumber')}
                 </div>
@@ -535,9 +535,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 3.5. INVOICE NUMBER - FROZEN TOP */}
               <th
                 onClick={() => handleSort('invoiceNumber' as any)}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <span>Invoice Number</span>
                   {renderSortIcon('invoiceNumber' as any)}
                 </div>
@@ -546,9 +546,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 4. BUYER - FROZEN TOP */}
               <th
                 onClick={() => handleSort('buyer')}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <span>Buyer</span>
                   {renderSortIcon('buyer')}
                 </div>
@@ -557,9 +557,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 5. CUSTOMER - FROZEN TOP */}
               <th
                 onClick={() => handleSort('customer')}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <span>Customer</span>
                   {renderSortIcon('customer')}
                 </div>
@@ -568,9 +568,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 6. CONTACT PERSON - FROZEN TOP */}
               <th
                 onClick={() => handleSort('contactPerson')}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <span>Contact Person</span>
                   {renderSortIcon('contactPerson')}
                 </div>
@@ -579,9 +579,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 7. ORDER QUANTITY - FROZEN TOP */}
               <th
                 onClick={() => handleSort('orderQuantity')}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-right sticky top-0 z-30 bg-[#0b1b3d]"
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-right sticky top-0 z-30 bg-[#0b1b3d]"
               >
-                <div className="flex items-center justify-end gap-1.5">
+                <div className="flex items-center justify-end gap-1">
                   <span>Order Qty</span>
                   {renderSortIcon('orderQuantity')}
                 </div>
@@ -590,9 +590,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 8. DELIVERY QUANTITY - FROZEN TOP */}
               <th
                 onClick={() => handleSort('deliveryQuantity')}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-right sticky top-0 z-30 bg-[#0b1b3d]"
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-right sticky top-0 z-30 bg-[#0b1b3d]"
               >
-                <div className="flex items-center justify-end gap-1.5">
+                <div className="flex items-center justify-end gap-1">
                   <span>Delivery Qty</span>
                   {renderSortIcon('deliveryQuantity')}
                 </div>
@@ -601,9 +601,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 9. BALANCE QUANTITY - FROZEN TOP */}
               <th
                 onClick={() => handleSort('balanceQuantity')}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-right sticky top-0 z-30 bg-[#0b1b3d]"
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-right sticky top-0 z-30 bg-[#0b1b3d]"
               >
-                <div className="flex items-center justify-end gap-1.5">
+                <div className="flex items-center justify-end gap-1">
                   <span>Balance Qty</span>
                   {renderSortIcon('balanceQuantity')}
                 </div>
@@ -612,9 +612,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 10. DELIVERY STATUS - FROZEN TOP */}
               <th
                 onClick={() => handleSort('deliveryStatus')}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <span>Delivery Status</span>
                   {renderSortIcon('deliveryStatus')}
                 </div>
@@ -623,9 +623,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 9. TC REQUEST DATE - FROZEN TOP */}
               <th
                 onClick={() => handleSort('tcRequestDate')}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <span>TC Request Date</span>
                   {renderSortIcon('tcRequestDate')}
                 </div>
@@ -634,9 +634,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 10. RECEIVED COMMERCIAL DOC DATE - FROZEN TOP */}
               <th
                 onClick={() => handleSort('receivedCommercialDocDate')}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <span>Rec Comm Doc Date</span>
                   {renderSortIcon('receivedCommercialDocDate')}
                 </div>
@@ -645,9 +645,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 11. DRAFT TC DATE - FROZEN TOP */}
               <th
                 onClick={() => handleSort('draftTcDate')}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <span>Draft TC Date</span>
                   {renderSortIcon('draftTcDate')}
                 </div>
@@ -656,9 +656,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 12. DRAFT CONFIRMATION DATE - FROZEN TOP */}
               <th
                 onClick={() => handleSort('draftConfirmationDate')}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <span>Draft Confirm Date</span>
                   {renderSortIcon('draftConfirmationDate')}
                 </div>
@@ -667,9 +667,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 13. REVISION QTY - FROZEN TOP */}
               <th
                 onClick={() => handleSort('revisionQty')}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-right sticky top-0 z-30 bg-[#0b1b3d]"
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-right sticky top-0 z-30 bg-[#0b1b3d]"
               >
-                <div className="flex items-center justify-end gap-1.5">
+                <div className="flex items-center justify-end gap-1">
                   <span>Revision Qty</span>
                   {renderSortIcon('revisionQty')}
                 </div>
@@ -678,9 +678,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 14. FINAL TC APPLY DATE - FROZEN TOP */}
               <th
                 onClick={() => handleSort('finalTcApplyDate')}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <span>Final TC Apply Date</span>
                   {renderSortIcon('finalTcApplyDate')}
                 </div>
@@ -689,9 +689,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 15. FINAL TC RECEIVED DATE - FROZEN TOP */}
               <th
                 onClick={() => handleSort('finalTcReceivedDate')}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <span>Final TC Rec Date</span>
                   {renderSortIcon('finalTcReceivedDate')}
                 </div>
@@ -700,9 +700,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 16. TC NUMBER - FROZEN TOP */}
               <th
                 onClick={() => handleSort('tcNumber')}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <span>TC Number</span>
                   {renderSortIcon('tcNumber')}
                 </div>
@@ -711,9 +711,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
               {/* 17. TC STATUS (Auto Determined) - FROZEN TOP & RIGHT */}
               <th
                 onClick={() => handleSort('tcStatus')}
-                className="py-2.5 px-3.5 cursor-pointer hover:bg-[#132c5e] transition-colors whitespace-nowrap sticky top-0 right-0 z-40 bg-[#0b1b3d] shadow-[-6px_2px_10px_-2px_rgba(0,0,0,0.35)] border-l border-[#1a386b]"
+                className="py-1.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors whitespace-nowrap sticky top-0 right-0 z-40 bg-[#0b1b3d] shadow-[-6px_2px_10px_-2px_rgba(0,0,0,0.35)] border-l border-[#1a386b]"
               >
-                <div className="flex items-center justify-between gap-1.5 min-w-[155px]">
+                <div className="flex items-center justify-between gap-1 min-w-[140px]">
                   <div className="flex items-center gap-1">
                     <Pin className="w-3 h-3 text-blue-300" />
                     <span>TC Status (Auto)</span>
@@ -776,7 +776,7 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                   >
                     {/* 0. CHECKBOX - FROZEN LEFT */}
                     <td
-                      className="py-2.5 px-2 text-center border-r border-slate-100 sticky left-0 z-10 bg-inherit w-9 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]"
+                      className="py-1.5 px-2 text-center border-r border-slate-100 sticky left-0 z-10 bg-inherit w-9 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <input
@@ -788,17 +788,17 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                     </td>
 
                     {/* 1. ORDER DATE - FROZEN LEFT */}
-                    <td className="py-2.5 px-3 font-mono font-medium text-slate-800 whitespace-nowrap tabular-nums border-r border-slate-100 sticky left-[36px] z-10 bg-inherit shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]">
+                    <td className="py-1.5 px-2.5 font-mono font-medium text-slate-800 whitespace-nowrap tabular-nums border-r border-slate-100 sticky left-[36px] z-10 bg-inherit shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]">
                       <span>{pi.orderDate}</span>
                     </td>
 
                     {/* 2. AGE (DAYS) - FROZEN LEFT */}
-                    <td className="py-2.5 px-2 text-center font-mono font-medium whitespace-nowrap tabular-nums border-r border-slate-100 sticky left-[141px] z-10 bg-inherit shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]">
+                    <td className="py-1.5 px-2 text-center font-mono font-medium whitespace-nowrap tabular-nums border-r border-slate-100 sticky left-[125px] z-10 bg-inherit shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]">
                       {(() => {
                         const calculatedDays = calculatePiAgeDays(pi.orderDate, pi.piAgeDays);
                         return (
                           <span
-                            className={`inline-block px-1.5 py-0.5 rounded-xs text-[11px] font-bold font-mono ${
+                            className={`inline-block px-1.5 py-0.5 rounded-xs text-[10px] font-bold font-mono ${
                               calculatedDays >= 90
                                 ? 'bg-red-100 text-red-800 border border-red-300'
                                 : calculatedDays >= 40
@@ -813,52 +813,52 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                     </td>
 
                     {/* 3. PI NO - FROZEN LEFT */}
-                    <td className="py-2.5 px-3 font-mono font-bold text-[#0b1b3d] whitespace-nowrap border-r border-slate-100 sticky left-[231px] z-10 bg-inherit shadow-[4px_0_6px_-2px_rgba(0,0,0,0.08)]">
+                    <td className="py-1.5 px-2.5 font-mono font-bold text-[#0b1b3d] whitespace-nowrap border-r border-slate-100 sticky left-[205px] z-10 bg-inherit shadow-[4px_0_6px_-2px_rgba(0,0,0,0.08)]">
                       <span className="group-hover:underline underline-offset-2">{pi.piNumber}</span>
                     </td>
 
                     {/* 3.5. INVOICE NUMBER */}
-                    <td className="py-2.5 px-3 whitespace-nowrap border-r border-slate-100 font-mono text-slate-800 font-semibold">
+                    <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-slate-100 font-mono text-slate-800 font-semibold">
                       {pi.invoiceNumber ? (
-                        <span className="px-2 py-0.5 bg-blue-50 border border-blue-300 text-blue-950 rounded-xs text-[11px] font-bold inline-block shadow-2xs">
+                        <span className="px-2 py-0.5 bg-blue-50 border border-blue-300 text-blue-950 rounded-xs text-[10px] font-bold inline-block shadow-2xs">
                           {pi.invoiceNumber}
                         </span>
                       ) : (
-                        <span className="px-1.5 py-0.5 border border-dashed border-slate-300 text-slate-400 rounded-xs text-[10px] font-normal hover:border-blue-400 hover:text-blue-700 transition-colors">
+                        <span className="px-1.5 py-0.5 border border-dashed border-slate-300 text-slate-400 rounded-xs text-[9px] font-normal hover:border-blue-400 hover:text-blue-700 transition-colors">
                           + Add Inv #
                         </span>
                       )}
                     </td>
 
                     {/* 4. BUYER */}
-                    <td className="py-2.5 px-3 font-semibold text-slate-900 whitespace-nowrap border-r border-slate-100">
+                    <td className="py-1.5 px-2.5 font-semibold text-slate-900 whitespace-nowrap border-r border-slate-100">
                       {pi.buyer}
                     </td>
 
                     {/* 5. CUSTOMER */}
-                    <td className="py-2.5 px-3 text-slate-700 whitespace-nowrap border-r border-slate-100 truncate max-w-[180px]">
+                    <td className="py-1.5 px-2.5 text-slate-700 whitespace-nowrap border-r border-slate-100 truncate max-w-[180px]">
                       {pi.customer}
                     </td>
 
                     {/* 6. CONTACT PERSON */}
-                    <td className="py-2.5 px-3 font-medium text-slate-800 whitespace-nowrap border-r border-slate-100">
-                      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-xs text-[11px]">
+                    <td className="py-1.5 px-2.5 font-medium text-slate-800 whitespace-nowrap border-r border-slate-100">
+                      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.2 rounded-xs text-[10px]">
                         {pi.contactPerson || 'System'}
                       </span>
                     </td>
 
                     {/* 7. ORDER QUANTITY */}
-                    <td className="py-2.5 px-3 font-mono text-right text-slate-900 font-semibold whitespace-nowrap tabular-nums border-r border-slate-100">
+                    <td className="py-1.5 px-2.5 font-mono text-right text-slate-900 font-semibold whitespace-nowrap tabular-nums border-r border-slate-100">
                       {orderQ.toLocaleString()}
                     </td>
 
                     {/* 8. DELIVERY QUANTITY */}
-                    <td className="py-2.5 px-3 font-mono text-right text-emerald-800 font-medium whitespace-nowrap tabular-nums border-r border-slate-100">
+                    <td className="py-1.5 px-2.5 font-mono text-right text-emerald-800 font-medium whitespace-nowrap tabular-nums border-r border-slate-100">
                       {delivQ.toLocaleString()}
                     </td>
 
                     {/* 9. BALANCE QUANTITY */}
-                    <td className="py-2.5 px-3 font-mono text-right whitespace-nowrap tabular-nums border-r border-slate-100">
+                    <td className="py-1.5 px-2.5 font-mono text-right whitespace-nowrap tabular-nums border-r border-slate-100">
                       <span
                         className={`font-semibold ${
                           balQ > 0 ? 'text-amber-800' : 'text-slate-400'
@@ -869,34 +869,34 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                     </td>
 
                     {/* 10. DELIVERY STATUS */}
-                    <td className="py-2.5 px-3 whitespace-nowrap border-r border-slate-100">
-                      <span className="font-medium text-slate-800 text-[11px]">
+                    <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-slate-100">
+                      <span className="font-medium text-slate-800 text-[10px]">
                         {pi.deliveryStatus}
                       </span>
                     </td>
 
                     {/* 11. TC REQUEST DATE */}
-                    <td className="py-2.5 px-3 font-mono text-slate-700 whitespace-nowrap border-r border-slate-100">
+                    <td className="py-1.5 px-2.5 font-mono text-slate-700 whitespace-nowrap border-r border-slate-100">
                       {pi.tcRequestDate || <span className="text-slate-300">-</span>}
                     </td>
 
                     {/* 10. RECEIVED COMMERCIAL DOC DATE */}
-                    <td className="py-2.5 px-3 font-mono text-slate-700 whitespace-nowrap border-r border-slate-100">
+                    <td className="py-1.5 px-2.5 font-mono text-slate-700 whitespace-nowrap border-r border-slate-100">
                       {pi.receivedCommercialDocDate || <span className="text-slate-300">-</span>}
                     </td>
 
                     {/* 11. DRAFT TC DATE */}
-                    <td className="py-2.5 px-3 font-mono text-slate-700 whitespace-nowrap border-r border-slate-100">
+                    <td className="py-1.5 px-2.5 font-mono text-slate-700 whitespace-nowrap border-r border-slate-100">
                       {pi.draftTcDate || <span className="text-slate-300">-</span>}
                     </td>
 
                     {/* 12. DRAFT CONFIRMATION DATE */}
-                    <td className="py-2.5 px-3 font-mono text-slate-700 whitespace-nowrap border-r border-slate-100">
+                    <td className="py-1.5 px-2.5 font-mono text-slate-700 whitespace-nowrap border-r border-slate-100">
                       {pi.draftConfirmationDate || <span className="text-slate-300">-</span>}
                     </td>
 
                     {/* 13. REVISION QTY */}
-                    <td className="py-2.5 px-3 font-mono text-right whitespace-nowrap tabular-nums border-r border-slate-100">
+                    <td className="py-1.5 px-2.5 font-mono text-right whitespace-nowrap tabular-nums border-r border-slate-100">
                       {pi.revisionQty && pi.revisionQty > 0 ? (
                         <span className="font-bold text-amber-900 bg-amber-50 px-1 rounded-xs">
                           {pi.revisionQty.toLocaleString()}
@@ -907,17 +907,17 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                     </td>
 
                     {/* 14. FINAL TC APPLY DATE */}
-                    <td className="py-2.5 px-3 font-mono text-slate-700 whitespace-nowrap border-r border-slate-100">
+                    <td className="py-1.5 px-2.5 font-mono text-slate-700 whitespace-nowrap border-r border-slate-100">
                       {pi.finalTcApplyDate || <span className="text-slate-300">-</span>}
                     </td>
 
                     {/* 15. FINAL TC RECEIVED DATE */}
-                    <td className="py-2.5 px-3 font-mono text-emerald-800 font-semibold whitespace-nowrap border-r border-slate-100">
+                    <td className="py-1.5 px-2.5 font-mono text-emerald-800 font-semibold whitespace-nowrap border-r border-slate-100">
                       {pi.finalTcReceivedDate || <span className="text-slate-300">-</span>}
                     </td>
 
                     {/* 16. TC NUMBER */}
-                    <td className="py-2.5 px-3 font-mono font-bold text-[#0b1b3d] whitespace-nowrap border-r border-slate-100">
+                    <td className="py-1.5 px-2.5 font-mono font-bold text-[#0b1b3d] whitespace-nowrap border-r border-slate-100">
                       {pi.tcNumber ? (
                         <span className="bg-blue-50 text-blue-900 px-1.5 py-0.5 rounded-xs border border-blue-200">
                           {pi.tcNumber}
@@ -929,7 +929,7 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
 
                     {/* 17. TC STATUS (Auto Determined) - FROZEN / STICKY RIGHT */}
                     <td
-                      className={`py-2.5 px-3.5 whitespace-nowrap sticky right-0 z-10 border-l border-slate-200 shadow-[-6px_0_10px_-2px_rgba(0,0,0,0.08)] ${
+                      className={`py-1.5 px-3 whitespace-nowrap sticky right-0 z-10 border-l border-slate-200 shadow-[-6px_0_10px_-2px_rgba(0,0,0,0.08)] ${
                         isSelected
                           ? 'bg-blue-100'
                           : idx % 2 === 0
@@ -937,7 +937,7 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                           : 'bg-[#fafbfc] group-hover:bg-slate-50'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-1.5 min-w-[155px]">
+                      <div className="flex items-center justify-between gap-1 min-w-[140px]">
                         {renderStatusBadge(currentStatus)}
                         <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#1e3a8a] transition-transform group-hover:translate-x-0.5" />
                       </div>
@@ -980,45 +980,45 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
             );
 
             return (
-              <tfoot className="bg-[#0b1b3d] text-white font-mono text-[11px] font-bold border-t-2 border-[#132c5e] sticky bottom-0 z-30 shadow-[0_-2px_6px_rgba(0,0,0,0.25)]">
+              <tfoot className="bg-[#0b1b3d] text-white font-mono text-[10px] font-bold border-t-2 border-[#132c5e] sticky bottom-0 z-30 shadow-[0_-2px_6px_rgba(0,0,0,0.25)]">
                 <tr>
-                  <td colSpan={6} className="py-2.5 px-3 uppercase tracking-wider text-left border-r border-[#1a386b] sticky bottom-0 left-0 z-40 bg-[#0b1b3d] shadow-[2px_-2px_4px_rgba(0,0,0,0.25)]">
+                  <td colSpan={6} className="py-1.5 px-2.5 uppercase tracking-wider text-left border-r border-[#1a386b] sticky bottom-0 left-0 z-40 bg-[#0b1b3d] shadow-[2px_-2px_4px_rgba(0,0,0,0.25)]">
                     TOTAL SUMMARY ({filteredData.length} PIs)
                   </td>
                   {/* 5. Total Order Quantity */}
-                  <td className="py-2.5 px-3 text-right tabular-nums text-white border-r border-[#1a386b]">
+                  <td className="py-1.5 px-2.5 text-right tabular-nums text-white border-r border-[#1a386b]">
                     {totals.totalOrder.toLocaleString()}
                   </td>
                   {/* 6. Total Delivery Quantity */}
-                  <td className="py-2.5 px-3 text-right tabular-nums text-emerald-300 border-r border-[#1a386b]">
+                  <td className="py-1.5 px-2.5 text-right tabular-nums text-emerald-300 border-r border-[#1a386b]">
                     {totals.totalDeliv.toLocaleString()}
                   </td>
                   {/* 7. Total Balance Quantity */}
-                  <td className="py-2.5 px-3 text-right tabular-nums text-amber-300 border-r border-[#1a386b]">
+                  <td className="py-1.5 px-2.5 text-right tabular-nums text-amber-300 border-r border-[#1a386b]">
                     {totals.totalBal.toLocaleString()}
                   </td>
                   {/* 8. Delivery Status */}
-                  <td className="py-2.5 px-3 border-r border-[#1a386b] text-center text-slate-400 font-sans text-[10px]">
+                  <td className="py-1.5 px-2.5 border-r border-[#1a386b] text-center text-slate-400 font-sans text-[10px]">
                     -
                   </td>
                   {/* 8.5. Invoice Number */}
-                  <td className="py-2.5 px-3 border-r border-[#1a386b] text-center text-slate-400 font-sans text-[10px]">
+                  <td className="py-1.5 px-2.5 border-r border-[#1a386b] text-center text-slate-400 font-sans text-[10px]">
                     -
                   </td>
                   {/* 9, 10, 11, 12 */}
-                  <td colSpan={4} className="py-2.5 px-3 border-r border-[#1a386b] text-center text-slate-400 font-sans text-[10px]">
+                  <td colSpan={4} className="py-1.5 px-2.5 border-r border-[#1a386b] text-center text-slate-400 font-sans text-[10px]">
                     Workflow Stages
                   </td>
                   {/* 13. Total Revision Qty */}
-                  <td className="py-2.5 px-3 text-right tabular-nums text-amber-300 border-r border-[#1a386b]">
+                  <td className="py-1.5 px-2.5 text-right tabular-nums text-amber-300 border-r border-[#1a386b]">
                     {totals.totalRev > 0 ? totals.totalRev.toLocaleString() : '-'}
                   </td>
                   {/* 14, 15, 16 */}
-                  <td colSpan={3} className="py-2.5 px-3 text-right text-slate-300 font-sans text-[10px] border-r border-[#1a386b]">
+                  <td colSpan={3} className="py-1.5 px-2.5 text-right text-slate-300 font-sans text-[10px] border-r border-[#1a386b]">
                     Auto Determined Status
                   </td>
                   {/* 17. TC Status Footer - FROZEN BOTTOM & RIGHT */}
-                  <td className="py-2.5 px-3.5 text-right font-mono text-[10px] text-emerald-300 font-bold whitespace-nowrap sticky bottom-0 right-0 z-40 bg-[#0b1b3d] border-l border-[#1a386b] shadow-[-6px_-2px_10px_-2px_rgba(0,0,0,0.35)]">
+                  <td className="py-1.5 px-3 text-right font-mono text-[10px] text-emerald-300 font-bold whitespace-nowrap sticky bottom-0 right-0 z-40 bg-[#0b1b3d] border-l border-[#1a386b] shadow-[-6px_-2px_10px_-2px_rgba(0,0,0,0.35)]">
                     Live Status Frozen
                   </td>
                 </tr>
@@ -1029,8 +1029,8 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
       </div>
 
       {/* Table Footer Bar */}
-      <div className="p-2.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-500 gap-2">
-        <div className="flex items-center gap-2 text-[11px]">
+      <div className="p-1.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-500 gap-1.5">
+        <div className="flex items-center gap-2 text-[10px]">
           <span>Showing <strong className="text-slate-800">{filteredData.length}</strong> records</span>
           <span>·</span>
           <span>Scroll horizontally or use arrow buttons to explore all 19 columns</span>

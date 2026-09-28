@@ -116,12 +116,12 @@ export const StatusOverviewChart: React.FC<StatusOverviewChartProps> = ({
   const circumference = 2 * Math.PI * radius;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-sm p-3.5 shadow-xs flex flex-col justify-between h-full">
+    <div className="bg-white border border-slate-200 rounded-sm p-2 shadow-xs flex flex-col justify-between h-full">
       {/* Header */}
-      <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-        <div className="flex items-center gap-2">
-          <PieChart className="w-4 h-4 text-[#0b1b3d]" />
-          <h3 className="text-xs font-bold text-[#0b1b3d] uppercase tracking-wide">
+      <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+        <div className="flex items-center gap-1.5">
+          <PieChart className="w-3.5 h-3.5 text-[#0b1b3d]" />
+          <h3 className="text-[11px] font-bold text-[#0b1b3d] uppercase tracking-wide">
             TC Status Overview ({data.length} PIs)
           </h3>
         </div>
@@ -130,7 +130,7 @@ export const StatusOverviewChart: React.FC<StatusOverviewChartProps> = ({
         <div className="flex items-center bg-slate-100 p-0.5 rounded border border-slate-200">
           <button
             onClick={() => setViewMode('all')}
-            className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all ${
+            className={`px-1.5 py-0.5 text-[9px] font-medium rounded transition-all ${
               viewMode === 'all'
                 ? 'bg-white text-blue-900 font-bold shadow-2xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -140,7 +140,7 @@ export const StatusOverviewChart: React.FC<StatusOverviewChartProps> = ({
           </button>
           <button
             onClick={() => setViewMode('summary')}
-            className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all ${
+            className={`px-1.5 py-0.5 text-[9px] font-medium rounded transition-all ${
               viewMode === 'summary'
                 ? 'bg-white text-blue-900 font-bold shadow-2xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -153,25 +153,25 @@ export const StatusOverviewChart: React.FC<StatusOverviewChartProps> = ({
 
       {/* Main Area: All 9 Granular Conditions View */}
       {viewMode === 'all' ? (
-        <div className="py-2 grid grid-cols-1 gap-1.5 max-h-[195px] overflow-y-auto pr-1">
+        <div className="py-1 grid grid-cols-1 gap-1 max-h-[160px] overflow-y-auto pr-0.5">
           {autoConditionsList.map((st) => (
             <div
               key={st.name}
               onClick={() => onSelectStatus && onSelectStatus(st.name)}
-              className="flex items-center justify-between text-xs p-1.5 rounded bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer border border-slate-100"
+              className="flex items-center justify-between text-xs py-0.5 px-1.5 rounded bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer border border-slate-100"
             >
-              <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
                 <span
-                  className="w-2.5 h-2.5 rounded-xs shrink-0"
+                  className="w-2 h-2 rounded-xs shrink-0"
                   style={{ backgroundColor: st.color }}
                 />
-                <span className="text-[11px] font-medium text-slate-800 truncate">
+                <span className="text-[10px] font-medium text-slate-800 truncate">
                   {st.label}
                 </span>
               </div>
 
-              <div className="flex items-center gap-3 shrink-0 font-mono text-[11px]">
-                <div className="w-16 bg-slate-200 h-1.5 rounded-full overflow-hidden hidden sm:block">
+              <div className="flex items-center gap-2 shrink-0 font-mono text-[10px]">
+                <div className="w-14 bg-slate-200 h-1.5 rounded-full overflow-hidden hidden sm:block">
                   <div
                     className="h-full rounded-full transition-all duration-300"
                     style={{
@@ -180,10 +180,10 @@ export const StatusOverviewChart: React.FC<StatusOverviewChartProps> = ({
                     }}
                   />
                 </div>
-                <span className="font-bold text-[#0b1b3d] tabular-nums bg-white px-1.5 py-0.5 rounded border border-slate-200 min-w-[42px] text-center">
+                <span className="font-bold text-[#0b1b3d] tabular-nums bg-white px-1 py-0.2 rounded border border-slate-200 min-w-[36px] text-center text-[10px]">
                   {st.count} PIs
                 </span>
-                <span className="text-[10px] text-slate-400 tabular-nums w-8 text-right">
+                <span className="text-[9px] text-slate-400 tabular-nums w-6 text-right">
                   {st.pct.toFixed(0)}%
                 </span>
               </div>
@@ -192,7 +192,7 @@ export const StatusOverviewChart: React.FC<StatusOverviewChartProps> = ({
         </div>
       ) : (
         /* Donut Summary View */
-        <div className="py-3 flex items-center justify-center gap-5">
+        <div className="py-1.5 flex items-center justify-center gap-3">
           <div className="relative w-28 h-28 shrink-0">
             <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
               <circle

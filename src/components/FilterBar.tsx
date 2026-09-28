@@ -40,8 +40,8 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   ];
 
   return (
-    <div className="bg-white border border-slate-200 rounded-sm shadow-xs px-2.5 py-1.5 mb-3">
-      <div className="flex items-center justify-between gap-2 overflow-x-auto scrollbar-none py-0.5">
+    <div className="bg-white border border-slate-200 rounded-sm shadow-xs px-2 py-1 mb-1.5">
+      <div className="flex items-center justify-between gap-1.5 overflow-x-auto scrollbar-none py-0">
         {/* Left: Filter Controls */}
         <div className="flex items-center gap-1.5 shrink-0">
           <div className="flex items-center gap-1 text-[11px] font-bold text-[#0b1b3d] uppercase tracking-wider pr-2 border-r border-slate-200 shrink-0">

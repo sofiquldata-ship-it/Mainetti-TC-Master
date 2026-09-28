@@ -31,8 +31,8 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-      <div className="px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-13">
+      <div className="px-3 sm:px-4 lg:px-6">
+        <div className="flex items-center justify-between h-10">
           {/* Left: Mobile Toggle + Breadcrumbs */}
           <div className="flex items-center gap-3">
             <button

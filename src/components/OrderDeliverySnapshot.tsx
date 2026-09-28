@@ -50,29 +50,29 @@ export const OrderDeliverySnapshot: React.FC<OrderDeliverySnapshotProps> = ({
   );
 
   return (
-    <div className="bg-white border border-slate-200 rounded-sm p-3.5 shadow-xs flex flex-col justify-between h-full">
+    <div className="bg-white border border-slate-200 rounded-sm p-2 shadow-xs flex flex-col justify-between h-full">
       {/* Header */}
-      <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
-        <div className="flex items-center gap-2">
-          <Truck className="w-4 h-4 text-[#0b1b3d]" />
-          <h3 className="text-xs font-bold text-[#0b1b3d] uppercase tracking-wide">
+      <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+        <div className="flex items-center gap-1.5">
+          <Truck className="w-3.5 h-3.5 text-[#0b1b3d]" />
+          <h3 className="text-[11px] font-bold text-[#0b1b3d] uppercase tracking-wide">
             Order & Delivery Snapshot
           </h3>
         </div>
-        <div className="flex items-center gap-1.5 text-[11px] font-mono">
+        <div className="flex items-center gap-1 text-[10px] font-mono">
           {deliveryAtRisk.length > 0 ? (
-            <span className="flex items-center gap-1 text-red-700 font-bold bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-xs">
-              <AlertTriangle className="w-3 h-3" />
-              {deliveryAtRisk.length} Post-Shipment Pending
+            <span className="flex items-center gap-0.5 text-red-700 font-bold bg-red-50 border border-red-200 px-1 py-0.2 rounded-xs">
+              <AlertTriangle className="w-2.5 h-2.5" />
+              {deliveryAtRisk.length} Risk
             </span>
           ) : (
-            <span className="text-emerald-700 font-medium">All Goods In Sync</span>
+            <span className="text-emerald-700 font-medium">In Sync</span>
           )}
         </div>
       </div>
 
       {/* Breakdown Grid */}
-      <div className="py-2.5 space-y-2.5">
+      <div className="py-1 space-y-1">
         {deliveryStages.map(({ status, label, matches }) => {
           const matching = data.filter((d) => matches(d));
           const count = matching.length;

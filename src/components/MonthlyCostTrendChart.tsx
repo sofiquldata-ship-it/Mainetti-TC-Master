@@ -80,31 +80,31 @@ export const MonthlyCostTrendChart: React.FC<MonthlyCostTrendChartProps> = ({ da
   const maxCost = Math.max(...trendData.map((d) => d.cost), 100) * 1.15;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-sm p-3.5 shadow-xs flex flex-col justify-between h-full">
+    <div className="bg-white border border-slate-200 rounded-sm p-2 shadow-xs flex flex-col justify-between h-full">
       {/* Header */}
-      <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
-        <div className="flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-[#0b1b3d]" />
-          <h3 className="text-xs font-bold text-[#0b1b3d] uppercase tracking-wide">
+      <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+        <div className="flex items-center gap-1.5">
+          <TrendingUp className="w-3.5 h-3.5 text-[#0b1b3d]" />
+          <h3 className="text-[11px] font-bold text-[#0b1b3d] uppercase tracking-wide">
             Monthly TC Cost Trend
           </h3>
         </div>
-        <div className="flex items-center gap-3 text-[11px] font-mono text-slate-500">
+        <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-xs bg-[#0b1b3d]" /> GRS/RCS
+            <span className="w-1.5 h-1.5 rounded-xs bg-[#0b1b3d]" /> GRS
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-xs bg-[#1e3a8a]" /> FSC
+            <span className="w-1.5 h-1.5 rounded-xs bg-[#1e3a8a]" /> FSC
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-xs bg-[#64748b]" /> GOTS
+            <span className="w-1.5 h-1.5 rounded-xs bg-[#64748b]" /> GOTS
           </span>
         </div>
       </div>
 
       {/* Interactive Bar Chart Area */}
-      <div className="py-2">
-        <div className="h-28 flex items-end justify-between gap-2 pt-4 px-1">
+      <div className="py-1">
+        <div className="h-24 flex items-end justify-between gap-1.5 pt-2 px-0.5">
           {trendData.map((item, idx) => {
             const heightPct = Math.max(8, (item.cost / maxCost) * 100);
             const totalItemCost = item.cost || 1;
