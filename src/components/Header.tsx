@@ -1,9 +1,25 @@
 import React from 'react';
-import { Menu, Calendar, ShieldCheck, Download, RefreshCw, Layers, FileSpreadsheet, ExternalLink, Zap, Check, Loader2, CloudCheck } from 'lucide-react';
+import {
+  Menu,
+  Calendar,
+  ShieldCheck,
+  Download,
+  RefreshCw,
+  Layers,
+  FileSpreadsheet,
+  ExternalLink,
+  Zap,
+  Check,
+  Loader2,
+  CloudCheck,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from 'lucide-react';
 import { LinkedSheetConfig } from '../utils/googleSheetsService';
 
 interface HeaderProps {
-  onToggleMobileSidebar: () => void;
+  onToggleSidebar: () => void;
+  isSidebarCollapsed?: boolean;
   onRefresh?: () => void;
   onExport?: () => void;
   onOpenGoogleSheetsSync?: () => void;
@@ -17,7 +33,8 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  onToggleMobileSidebar,
+  onToggleSidebar,
+  isSidebarCollapsed = false,
   onRefresh,
   onExport,
   onOpenGoogleSheetsSync,
@@ -33,23 +50,31 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
       <div className="px-3 sm:px-4 lg:px-6">
         <div className="flex items-center justify-between h-10">
-          {/* Left: Mobile Toggle + Breadcrumbs */}
-          <div className="flex items-center gap-3">
+          {/* Left: Sidebar Toggle Button + Breadcrumbs */}
+          <div className="flex items-center gap-2.5">
             <button
               type="button"
-              onClick={onToggleMobileSidebar}
-              className="lg:hidden p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-sm border border-slate-300 transition-colors"
-              aria-label="Toggle navigation sidebar"
+              onClick={onToggleSidebar}
+              className="p-1 px-1.5 text-slate-700 hover:text-[#0b1b3d] hover:bg-slate-100 rounded-sm border border-slate-300 transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+              aria-label={isSidebarCollapsed ? 'Show Sidebar' : 'Hide Sidebar'}
+              title={isSidebarCollapsed ? 'Show Sidebar' : 'Hide Sidebar'}
             >
-              <Menu className="w-5 h-5" />
+              {isSidebarCollapsed ? (
+                <PanelLeftOpen className="w-4 h-4 text-[#1e3a8a]" />
+              ) : (
+                <PanelLeftClose className="w-4 h-4 text-slate-600" />
+              )}
+              <span className="text-[11px] font-semibold text-slate-700 hidden sm:inline">
+                {isSidebarCollapsed ? 'Show Sidebar' : 'Hide Sidebar'}
+              </span>
             </button>
 
             {/* Breadcrumb Trail */}
-            <div className="flex items-center gap-2 text-xs">
-              <span className="font-semibold text-slate-500 uppercase tracking-wide">
+            <div className="flex items-center gap-1.5 text-xs pl-1 border-l border-slate-200">
+              <span className="font-semibold text-slate-500 uppercase tracking-wide hidden md:inline">
                 Mainetti Operations
               </span>
-              <span className="text-slate-300">/</span>
+              <span className="text-slate-300 hidden md:inline">/</span>
               <span className="font-bold text-[#0b1b3d] font-mono uppercase tracking-tight">
                 {activeTab}
               </span>

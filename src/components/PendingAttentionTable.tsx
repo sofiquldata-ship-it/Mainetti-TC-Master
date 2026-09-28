@@ -23,6 +23,7 @@ interface PendingAttentionTableProps {
   onExport?: () => void;
   onSaveToGoogleSheets?: () => void;
   onBatchUpdatePIs?: (ids: string[], updates: Partial<PIData>) => void;
+  isFullPage?: boolean;
 }
 
 type SortField =
@@ -69,6 +70,7 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
   onExport,
   onSaveToGoogleSheets,
   onBatchUpdatePIs,
+  isFullPage = false,
 }) => {
   const [viewMode, setViewMode] = useState<'all' | 'not_requested' | 'attention' | 'completed'>('all');
   const [sortField, setSortField] = useState<SortField>('orderDate');
@@ -483,7 +485,11 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
       {/* Main Table View with Scrollbar & Frozen Headers + Frozen Columns (Left: Date, PI No | Right: TC Status) */}
       <div
         ref={tableContainerRef}
-        className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-220px)] min-h-[480px] table-scrollbar relative border-b border-slate-200"
+        className={`overflow-x-auto overflow-y-auto table-scrollbar relative border-b border-slate-200 ${
+          isFullPage
+            ? 'h-[calc(100vh-140px)] max-h-[calc(100vh-140px)] min-h-[500px]'
+            : 'max-h-[calc(100vh-220px)] min-h-[460px]'
+        }`}
       >
         <table className="w-full text-left border-collapse min-w-[1780px]">
           <thead className="sticky top-0 z-30 shadow-[0_2px_4px_rgba(0,0,0,0.15)]">

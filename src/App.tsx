@@ -55,6 +55,21 @@ export default function App() {
     return saved.data && saved.data.length > 0 ? 'Dashboard' : 'Excel Upload';
   });
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem('mainetti_sidebar_collapsed') === 'true';
+  });
+
+  const handleToggleSidebar = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setIsMobileSidebarOpen((prev) => !prev);
+    } else {
+      setIsSidebarCollapsed((prev) => {
+        const next = !prev;
+        localStorage.setItem('mainetti_sidebar_collapsed', String(next));
+        return next;
+      });
+    }
+  };
 
   // Google Auth & Sheets State
   const [googleUser, setGoogleUser] = useState<User | null>(null);
@@ -567,13 +582,16 @@ export default function App() {
         onExport={handleExportCSV}
         isOpenMobile={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={handleToggleSidebar}
       />
 
       {/* Main Content Viewport */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
         {/* Workspace Top Header */}
         <Header
-          onToggleMobileSidebar={() => setIsMobileSidebarOpen(true)}
+          onToggleSidebar={handleToggleSidebar}
+          isSidebarCollapsed={isSidebarCollapsed}
           onRefresh={handleReloadData}
           onExport={handleExportCSV}
           onOpenGoogleSheetsSync={() => setIsGoogleSheetsModalOpen(true)}
@@ -606,7 +624,7 @@ export default function App() {
             />
           ) : activeTab === 'TC Master' ? (
             /* Dedicated TC Master Page: Just Filter Bar + PI Table */
-            <div className="space-y-2">
+            <div className="space-y-1.5 flex flex-col">
               <FilterBar
                 filters={filters}
                 onFilterChange={handleFilterChange}
@@ -622,6 +640,7 @@ export default function App() {
                 onExport={handleExportCSV}
                 onSaveToGoogleSheets={() => setIsGoogleSheetsModalOpen(true)}
                 onBatchUpdatePIs={handleBatchUpdatePIs}
+                isFullPage={true}
               />
             </div>
           ) : piList.length === 0 ? (
