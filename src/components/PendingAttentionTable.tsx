@@ -530,7 +530,18 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                 </div>
               </th>
 
-              {/* 3. BUYER - FROZEN TOP */}
+              {/* 3.5. INVOICE NUMBER - FROZEN TOP */}
+              <th
+                onClick={() => handleSort('invoiceNumber' as any)}
+                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Invoice Number</span>
+                  {renderSortIcon('invoiceNumber' as any)}
+                </div>
+              </th>
+
+              {/* 4. BUYER - FROZEN TOP */}
               <th
                 onClick={() => handleSort('buyer')}
                 className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
@@ -541,7 +552,7 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                 </div>
               </th>
 
-              {/* 4. CUSTOMER - FROZEN TOP */}
+              {/* 5. CUSTOMER - FROZEN TOP */}
               <th
                 onClick={() => handleSort('customer')}
                 className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
@@ -552,7 +563,7 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                 </div>
               </th>
 
-              {/* 4.5. CONTACT PERSON - FROZEN TOP */}
+              {/* 6. CONTACT PERSON - FROZEN TOP */}
               <th
                 onClick={() => handleSort('contactPerson')}
                 className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
@@ -563,7 +574,7 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                 </div>
               </th>
 
-              {/* 5. ORDER QUANTITY - FROZEN TOP */}
+              {/* 7. ORDER QUANTITY - FROZEN TOP */}
               <th
                 onClick={() => handleSort('orderQuantity')}
                 className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-right sticky top-0 z-30 bg-[#0b1b3d]"
@@ -574,7 +585,7 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                 </div>
               </th>
 
-              {/* 6. DELIVERY QUANTITY - FROZEN TOP */}
+              {/* 8. DELIVERY QUANTITY - FROZEN TOP */}
               <th
                 onClick={() => handleSort('deliveryQuantity')}
                 className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-right sticky top-0 z-30 bg-[#0b1b3d]"
@@ -585,7 +596,7 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                 </div>
               </th>
 
-              {/* 7. BALANCE QUANTITY - FROZEN TOP */}
+              {/* 9. BALANCE QUANTITY - FROZEN TOP */}
               <th
                 onClick={() => handleSort('balanceQuantity')}
                 className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-right sticky top-0 z-30 bg-[#0b1b3d]"
@@ -596,7 +607,7 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                 </div>
               </th>
 
-              {/* 8. DELIVERY STATUS - FROZEN TOP */}
+              {/* 10. DELIVERY STATUS - FROZEN TOP */}
               <th
                 onClick={() => handleSort('deliveryStatus')}
                 className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
@@ -604,17 +615,6 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                 <div className="flex items-center gap-1.5">
                   <span>Delivery Status</span>
                   {renderSortIcon('deliveryStatus')}
-                </div>
-              </th>
-
-              {/* 8.5. INVOICE NUMBER - FROZEN TOP */}
-              <th
-                onClick={() => handleSort('invoiceNumber' as any)}
-                className="py-2.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Invoice Number</span>
-                  {renderSortIcon('invoiceNumber' as any)}
                 </div>
               </th>
 
@@ -815,34 +815,47 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                       <span className="group-hover:underline underline-offset-2">{pi.piNumber}</span>
                     </td>
 
-                    {/* 3. BUYER */}
+                    {/* 3.5. INVOICE NUMBER */}
+                    <td className="py-2.5 px-3 whitespace-nowrap border-r border-slate-100 font-mono text-slate-800 font-semibold">
+                      {pi.invoiceNumber ? (
+                        <span className="px-2 py-0.5 bg-blue-50 border border-blue-300 text-blue-950 rounded-xs text-[11px] font-bold inline-block shadow-2xs">
+                          {pi.invoiceNumber}
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 border border-dashed border-slate-300 text-slate-400 rounded-xs text-[10px] font-normal hover:border-blue-400 hover:text-blue-700 transition-colors">
+                          + Add Inv #
+                        </span>
+                      )}
+                    </td>
+
+                    {/* 4. BUYER */}
                     <td className="py-2.5 px-3 font-semibold text-slate-900 whitespace-nowrap border-r border-slate-100">
                       {pi.buyer}
                     </td>
 
-                    {/* 4. CUSTOMER */}
+                    {/* 5. CUSTOMER */}
                     <td className="py-2.5 px-3 text-slate-700 whitespace-nowrap border-r border-slate-100 truncate max-w-[180px]">
                       {pi.customer}
                     </td>
 
-                    {/* 4.5. CONTACT PERSON */}
+                    {/* 6. CONTACT PERSON */}
                     <td className="py-2.5 px-3 font-medium text-slate-800 whitespace-nowrap border-r border-slate-100">
                       <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-xs text-[11px]">
                         {pi.contactPerson || 'System'}
                       </span>
                     </td>
 
-                    {/* 5. ORDER QUANTITY */}
+                    {/* 7. ORDER QUANTITY */}
                     <td className="py-2.5 px-3 font-mono text-right text-slate-900 font-semibold whitespace-nowrap tabular-nums border-r border-slate-100">
                       {orderQ.toLocaleString()}
                     </td>
 
-                    {/* 6. DELIVERY QUANTITY */}
+                    {/* 8. DELIVERY QUANTITY */}
                     <td className="py-2.5 px-3 font-mono text-right text-emerald-800 font-medium whitespace-nowrap tabular-nums border-r border-slate-100">
                       {delivQ.toLocaleString()}
                     </td>
 
-                    {/* 7. BALANCE QUANTITY */}
+                    {/* 9. BALANCE QUANTITY */}
                     <td className="py-2.5 px-3 font-mono text-right whitespace-nowrap tabular-nums border-r border-slate-100">
                       <span
                         className={`font-semibold ${
@@ -853,25 +866,14 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                       </span>
                     </td>
 
-                    {/* 8. DELIVERY STATUS */}
+                    {/* 10. DELIVERY STATUS */}
                     <td className="py-2.5 px-3 whitespace-nowrap border-r border-slate-100">
                       <span className="font-medium text-slate-800 text-[11px]">
                         {pi.deliveryStatus}
                       </span>
                     </td>
 
-                    {/* 8.5. INVOICE NUMBER */}
-                    <td className="py-2.5 px-3 whitespace-nowrap border-r border-slate-100 font-mono text-slate-800 font-semibold">
-                      {pi.invoiceNumber ? (
-                        <span className="px-1.5 py-0.5 bg-blue-50/80 border border-blue-200 text-blue-950 rounded-xs text-[11px] font-bold">
-                          {pi.invoiceNumber}
-                        </span>
-                      ) : (
-                        <span className="text-slate-300">-</span>
-                      )}
-                    </td>
-
-                    {/* 9. TC REQUEST DATE */}
+                    {/* 11. TC REQUEST DATE */}
                     <td className="py-2.5 px-3 font-mono text-slate-700 whitespace-nowrap border-r border-slate-100">
                       {pi.tcRequestDate || <span className="text-slate-300">-</span>}
                     </td>

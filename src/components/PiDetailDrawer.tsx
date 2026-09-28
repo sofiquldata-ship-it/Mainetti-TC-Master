@@ -227,6 +227,45 @@ export const PiDetailDrawer: React.FC<PiDetailDrawerProps> = ({
             </div>
           </div>
 
+          {/* Commercial Invoice Number Entry */}
+          <div className="bg-blue-50/70 border border-blue-200 p-3 rounded-sm space-y-1.5 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-[#0b1b3d] flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-600" />
+                <span>Commercial Invoice Number</span>
+              </label>
+              <span className="text-[10px] text-blue-700 font-mono font-medium">
+                (Manual Input / From Document)
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Enter Invoice No (e.g. INV-2026-90412 / MSF-8812)"
+                value={invoiceNo}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setInvoiceNo(val);
+                  applyWorkflowUpdate({ invoiceNumber: val || undefined });
+                }}
+                className="flex-1 py-1.5 px-3 bg-white border border-blue-300 rounded-xs text-xs font-mono font-bold text-[#0b1b3d] focus:border-blue-700 focus:ring-1 focus:ring-blue-700 focus:outline-none placeholder:font-normal placeholder:text-slate-400"
+              />
+              {invoiceNo && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInvoiceNo('');
+                    applyWorkflowUpdate({ invoiceNumber: undefined });
+                  }}
+                  className="px-2.5 py-1 text-[11px] font-medium text-slate-500 hover:text-red-700 bg-white border border-slate-300 rounded-xs hover:bg-red-50 transition-colors"
+                  title="Clear Invoice Number"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* 8 TC Workflow Dates & Fields Input Form */}
           <div className="border border-slate-200 rounded-sm p-3.5 bg-white space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-sans">
@@ -454,24 +493,6 @@ export const PiDetailDrawer: React.FC<PiDetailDrawerProps> = ({
               <span className="text-xs font-bold text-[#0b1b3d] uppercase tracking-wide block">
                 PI Quantities & Commercial Logistics
               </span>
-            </div>
-
-            {/* Invoice Number Entry */}
-            <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xs space-y-1">
-              <label className="text-[11px] font-bold text-slate-800 block">
-                Commercial Invoice Number
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. INV-2026-90412 / MSF-8812"
-                value={invoiceNo}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setInvoiceNo(val);
-                  applyWorkflowUpdate({ invoiceNumber: val || undefined });
-                }}
-                className="w-full py-1 px-2.5 bg-white border border-slate-300 rounded-xs text-xs font-mono font-bold text-slate-900 focus:border-blue-600 focus:outline-none"
-              />
             </div>
 
             <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-xs border border-slate-200 font-mono text-xs">
