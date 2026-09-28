@@ -425,6 +425,7 @@ export default function App() {
     const headers = [
       'Order Date',
       'PI Number',
+      'Invoice Number',
       'Buyer',
       'Customer',
       'Contact Person',
@@ -470,6 +471,7 @@ export default function App() {
       return [
         d.orderDate,
         `"${d.piNumber}"`,
+        `"${d.invoiceNumber || ''}"`,
         `"${d.buyer}"`,
         `"${d.customer}"`,
         `"${d.contactPerson || 'System'}"`,

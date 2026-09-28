@@ -76,6 +76,7 @@ const formatSheetRows = (data: PIData[]) => {
   const masterHeaders = [
     'Order Date',
     'PI Number',
+    'Invoice Number',
     'Standard',
     'Buyer',
     'Garment Factory / Customer',
@@ -133,6 +134,7 @@ const formatSheetRows = (data: PIData[]) => {
     return [
       item.orderDate || '',
       item.piNumber || '',
+      item.invoiceNumber || '',
       item.standard || 'GRS',
       item.buyer || '',
       item.customer || '',
@@ -594,6 +596,7 @@ export const importDataFromGoogleSpreadsheet = async (
 
   const orderDateCol = findCol(['orderdate', 'date', 'podate']);
   const piCol = findCol(['pinumber', 'pino', 'pi', 'orderno']);
+  const invoiceNumberCol = findCol(['invoicenumber', 'invoiceno', 'invno', 'invoice', 'inv']);
   const buyerCol = findCol(['buyer', 'brand', 'retailer']);
   const custCol = findCol(['customer', 'factory', 'vendor', 'garmentfactory']);
   const contactPersonCol = findCol(['contactperson', 'createdby', 'creator', 'createdbyname', 'user', 'contact']);
@@ -638,6 +641,7 @@ export const importDataFromGoogleSpreadsheet = async (
     };
 
     const piNumber = getCell(piCol, `PI-GS-${idx + 1}`);
+    const invoiceNumber = getCell(invoiceNumberCol, '');
     const buyer = getCell(buyerCol, 'Global Buyer');
     const customer = getCell(custCol, 'Partner Garment Factory');
     const contactPerson = getCell(contactPersonCol, 'System');
@@ -691,6 +695,7 @@ export const importDataFromGoogleSpreadsheet = async (
     parsedItems.push({
       id: `${piNumber}-${idx}`,
       piNumber,
+      invoiceNumber,
       buyer,
       customer,
       contactPerson,
