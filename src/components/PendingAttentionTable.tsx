@@ -487,7 +487,7 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
         ref={tableContainerRef}
         className={`overflow-x-auto overflow-y-auto table-scrollbar relative border-b border-slate-200 ${
           isFullPage
-            ? 'h-[calc(100vh-140px)] max-h-[calc(100vh-140px)] min-h-[500px]'
+            ? 'h-[calc(100vh-215px)] max-h-[calc(100vh-215px)] min-h-[420px]'
             : 'max-h-[calc(100vh-220px)] min-h-[460px]'
         }`}
       >
