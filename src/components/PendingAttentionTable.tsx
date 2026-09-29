@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { PIData, TCStatus, computeAutomatedTcStatus, calculatePiAgeDays } from '../types/tc';
+import { PIData, TCStatus, computeAutomatedTcStatus, calculatePiAgeDays, isCancelledStatus } from '../types/tc';
 import { BatchUpdateModal } from './BatchUpdateModal';
 import {
   ArrowUpDown,
@@ -151,9 +151,14 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
     }
   };
 
-  // Filter based on sub-tab
+  // Filter based on sub-tab and exclude cancelled records
   const filteredData = useMemo(() => {
-    let list = [...data];
+    let list = data.filter(
+      (item) =>
+        !isCancelledStatus(item.orderStatus) &&
+        !isCancelledStatus(item.deliveryStatus) &&
+        !isCancelledStatus(item.tcStatus)
+    );
 
     if (viewMode === 'not_requested') {
       list = list.filter((item) => computeAutomatedTcStatus(item) === 'Not Requested');

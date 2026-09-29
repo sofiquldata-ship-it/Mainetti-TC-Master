@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { PIData, UploadedFileInfo, TCStatus, PaymentStatus, DeliveryStatus, computeAutomatedTcStatus } from '../types/tc';
+import { PIData, UploadedFileInfo, TCStatus, PaymentStatus, DeliveryStatus, computeAutomatedTcStatus, isCancelledStatus } from '../types/tc';
 
 const STORAGE_KEY_DATA = 'MAINETTI_TC_DATA_V1';
 const STORAGE_KEY_FILE_INFO = 'MAINETTI_TC_FILE_INFO_V1';
@@ -293,6 +293,16 @@ export async function parseExcelFile(
   const gussetCol = findColIndex(['gusset', 'g(mm)', 'g (mm)', 'g', 'gusset(mm)', 'gusset mm', 'bottom gusset']);
   const flapCol = findColIndex(['flap', 'f(mm)', 'f (mm)', 'f', 'flap(mm)', 'flap mm', 'lip']);
   const pktBoxCol = findColIndex(['pkt/box', 'pkt / box', 'packet/box', 'pkt/ctn', 'pkt', 'box', 'boxes', 'cartons', 'ctn', 'pack/box', 'packet']);
+  const orderStatusCol = findColIndex([
+    'order status',
+    'orderstatus',
+    'po status',
+    'order state',
+    'order_status',
+    'order tracking',
+    'order state status',
+    'item status',
+  ]);
   
   // New TC-related columns
   const tcRequestDateCol = findColIndex(['tc request date', 'request date', 'tc requested date', 'tc request', 'request dt']);
@@ -318,6 +328,7 @@ export async function parseExcelFile(
     tcStatus: TCStatus;
     paymentStatus: PaymentStatus;
     deliveryStatus: DeliveryStatus;
+    orderStatus?: string;
     standard: string;
     certBody: string;
     poReference: string;
@@ -341,6 +352,7 @@ export async function parseExcelFile(
   }
 
   const piGroups: Record<string, GroupedPI> = {};
+  const cancelledGroupKeys = new Set<string>();
   let zeroOrNonTcCount = 0;
   let lastSeenPiNumber = '';
   let lastSeenBuyer = '';
@@ -456,6 +468,31 @@ export async function parseExcelFile(
     const normPi = piNumber.trim().toUpperCase();
     const normCust = customer.trim().toUpperCase();
     const groupKey = normCust ? `${normPi}||${normCust}` : normPi;
+
+    // Check for Order Status / Cancel Status in this row
+    const rawOrderStatus = orderStatusCol !== -1 ? getCell(orderStatusCol, '') : '';
+    const rawTcStatus = getCell(tcStatusCol, '');
+    const rawDelivStatus = deliveryStatusCol !== -1 ? getCell(deliveryStatusCol, '') : '';
+
+    if (
+      isCancelledStatus(rawOrderStatus) ||
+      isCancelledStatus(rawTcStatus) ||
+      isCancelledStatus(rawDelivStatus) ||
+      normRowText.includes('ordercancelled') ||
+      normRowText.includes('ordercanceled') ||
+      normRowText.includes('statuscancel')
+    ) {
+      cancelledGroupKeys.add(groupKey);
+      cancelledGroupKeys.add(normPi);
+      if (piGroups[groupKey]) {
+        delete piGroups[groupKey];
+      }
+      return;
+    }
+
+    if (cancelledGroupKeys.has(groupKey) || cancelledGroupKeys.has(normPi)) {
+      return;
+    }
 
     const tcReqDate = tcRequestDateCol !== -1 && rowArray[tcRequestDateCol] ? parseDateValue(rowArray[tcRequestDateCol]) : undefined;
     const recCommDate = receivedCommDocCol !== -1 && rowArray[receivedCommDocCol] ? parseDateValue(rowArray[receivedCommDocCol]) : undefined;
@@ -699,6 +736,7 @@ export async function parseExcelFile(
         paymentStatus: group.paymentStatus,
         expectedTcDate: group.expectedTcDate,
         deliveryStatus: finalDeliveryStatus,
+        orderStatus: group.orderStatus || '',
         invoiceNumber: group.invoiceNumber || '',
         contactPerson: group.contactPerson || 'System',
         standard: group.standard,

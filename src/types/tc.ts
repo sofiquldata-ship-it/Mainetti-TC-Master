@@ -69,6 +69,7 @@ export interface PIData {
   poReference: string;
   season: string;
   contactPerson?: string;
+  orderStatus?: string;
   attentionReason?: string;
   notes?: string;
   productItems?: PIProductItem[];
@@ -87,6 +88,23 @@ export interface PIData {
   lastUpdatedDate?: string;
   updatedBy?: string;
   changeHistory?: FieldChangeRecord[];
+}
+
+/**
+ * Helper to identify if an order or status is Cancelled/Void
+ */
+export function isCancelledStatus(val: any): boolean {
+  if (!val) return false;
+  const s = String(val).toLowerCase().trim();
+  return (
+    s === 'cancel' ||
+    s === 'cancelled' ||
+    s === 'canceled' ||
+    s.includes('cancel') ||
+    s.includes('cancellation') ||
+    s.includes('void') ||
+    s.includes('dropped')
+  );
 }
 
 /**

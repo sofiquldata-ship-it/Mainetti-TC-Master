@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { PIData, FilterState, TCStatus, UploadedFileInfo, computeAutomatedTcStatus } from './types/tc';
+import { PIData, FilterState, TCStatus, UploadedFileInfo, computeAutomatedTcStatus, isCancelledStatus } from './types/tc';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { FilterBar } from './components/FilterBar';
@@ -242,6 +242,15 @@ export default function App() {
   // Filtered dataset
   const filteredData = useMemo(() => {
     return piList.filter((item) => {
+      // Exclude Cancelled orders from TC List
+      if (
+        isCancelledStatus(item.orderStatus) ||
+        isCancelledStatus(item.deliveryStatus) ||
+        isCancelledStatus(item.tcStatus)
+      ) {
+        return false;
+      }
+
       // Filter tab context
       if (activeTab === 'Audit Pipeline') {
         if (item.tcStatus !== 'Pending' && item.tcStatus !== 'Under Review') return false;

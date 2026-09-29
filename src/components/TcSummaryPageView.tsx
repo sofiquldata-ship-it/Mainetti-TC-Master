@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { PIData, computeAutomatedTcStatus } from '../types/tc';
+import { PIData, computeAutomatedTcStatus, isCancelledStatus } from '../types/tc';
 import {
   BarChart3,
   DollarSign,
@@ -39,10 +39,16 @@ export const TcSummaryPageView: React.FC<TcSummaryPageViewProps> = ({
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedBuyerFilter, setSelectedBuyerFilter] = useState('all');
 
-  // Filtered by buyer dropdown if selected
+  // Filtered by buyer dropdown if selected and excluding Cancelled orders
   const activeData = useMemo(() => {
-    if (selectedBuyerFilter === 'all') return data;
-    return data.filter((d) => d.buyer.toLowerCase() === selectedBuyerFilter.toLowerCase());
+    const uncancelled = data.filter(
+      (d) =>
+        !isCancelledStatus(d.orderStatus) &&
+        !isCancelledStatus(d.deliveryStatus) &&
+        !isCancelledStatus(d.tcStatus)
+    );
+    if (selectedBuyerFilter === 'all') return uncancelled;
+    return uncancelled.filter((d) => d.buyer.toLowerCase() === selectedBuyerFilter.toLowerCase());
   }, [data, selectedBuyerFilter]);
 
   // Total Key Metrics
