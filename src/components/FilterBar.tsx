@@ -40,17 +40,17 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   ];
 
   return (
-    <div className="bg-white border border-slate-200 rounded-sm shadow-xs px-2.5 py-1.5 mb-1.5 sticky top-[40px] z-20">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {/* Left: Filter Controls */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <div className="flex items-center gap-1 text-[11px] font-bold text-[#0b1b3d] uppercase tracking-wider pr-2 border-r border-slate-200 shrink-0">
+    <div className="bg-white border border-slate-200 rounded-sm shadow-xs px-2 py-1 mb-1.5 sticky top-[40px] z-20">
+      <div className="flex items-center flex-nowrap justify-between gap-1.5 w-full min-w-0 overflow-x-auto">
+        {/* Left: Filter Controls in One Single Row */}
+        <div className="flex items-center flex-nowrap gap-1 shrink-0">
+          <div className="flex items-center gap-1 text-[11px] font-bold text-[#0b1b3d] uppercase tracking-wider pr-1.5 border-r border-slate-200 shrink-0">
             <Filter className="w-3.5 h-3.5 text-[#1e3a8a]" />
             <span>Filters</span>
           </div>
 
           {/* Date Range Filter */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-sm px-2 py-0.5">
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-sm px-1.5 py-0.5 shrink-0">
             <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
             <span className="text-[11px] font-medium text-slate-500 uppercase tracking-tight shrink-0">Date:</span>
             <select
@@ -63,18 +63,18 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               <option value="60days">Last 60 Days</option>
               <option value="90days">Last 90 Days</option>
               <option value="aug2026">Aug 2026</option>
-              <option value="sep2026">Sep 2026 (MTD)</option>
+              <option value="sep2026">Sep 2026</option>
             </select>
           </div>
 
           {/* Customer Filter */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-sm px-2 py-0.5">
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-sm px-1.5 py-0.5 shrink-0">
             <Building2 className="w-3.5 h-3.5 text-slate-500 shrink-0" />
             <span className="text-[11px] font-medium text-slate-500 uppercase tracking-tight shrink-0">Customer:</span>
             <select
               value={filters.customer}
               onChange={(e) => onFilterChange({ customer: e.target.value })}
-              className="text-xs bg-transparent font-medium text-slate-800 focus:outline-hidden cursor-pointer max-w-[130px] truncate"
+              className="text-xs bg-transparent font-medium text-slate-800 focus:outline-hidden cursor-pointer max-w-[110px] xl:max-w-[140px] truncate"
             >
               {customers.map((c) => (
                 <option key={c} value={c}>
@@ -85,13 +85,13 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           </div>
 
           {/* Buyer Filter */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-sm px-2 py-0.5">
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-sm px-1.5 py-0.5 shrink-0">
             <Users className="w-3.5 h-3.5 text-slate-500 shrink-0" />
             <span className="text-[11px] font-medium text-slate-500 uppercase tracking-tight shrink-0">Buyer:</span>
             <select
               value={filters.buyer}
               onChange={(e) => onFilterChange({ buyer: e.target.value })}
-              className="text-xs bg-transparent font-medium text-slate-800 focus:outline-hidden cursor-pointer max-w-[120px] truncate"
+              className="text-xs bg-transparent font-medium text-slate-800 focus:outline-hidden cursor-pointer max-w-[100px] xl:max-w-[130px] truncate"
             >
               {buyers.map((b) => (
                 <option key={b} value={b}>
@@ -102,13 +102,13 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           </div>
 
           {/* Delivery Status Filter */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-sm px-2 py-0.5">
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-sm px-1.5 py-0.5 shrink-0">
             <Tag className="w-3.5 h-3.5 text-blue-900 shrink-0" />
             <span className="text-[11px] font-medium text-slate-500 uppercase tracking-tight shrink-0">Delivery:</span>
             <select
               value={filters.deliveryStatus || 'All Delivery Statuses'}
               onChange={(e) => onFilterChange({ deliveryStatus: e.target.value })}
-              className="text-xs bg-transparent font-semibold text-blue-900 focus:outline-hidden cursor-pointer max-w-[130px] truncate"
+              className="text-xs bg-transparent font-semibold text-blue-900 focus:outline-hidden cursor-pointer max-w-[105px] xl:max-w-[130px] truncate"
             >
               {deliveryStatusList.map((ds) => (
                 <option key={ds} value={ds}>
@@ -119,13 +119,13 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           </div>
 
           {/* TC Status Filter */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-sm px-2 py-0.5">
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-sm px-1.5 py-0.5 shrink-0">
             <Tag className="w-3.5 h-3.5 text-slate-500 shrink-0" />
             <span className="text-[11px] font-medium text-slate-500 uppercase tracking-tight shrink-0">TC Status:</span>
             <select
               value={filters.tcStatus}
               onChange={(e) => onFilterChange({ tcStatus: e.target.value })}
-              className={`text-xs bg-transparent font-semibold focus:outline-hidden cursor-pointer ${
+              className={`text-xs bg-transparent font-semibold focus:outline-hidden cursor-pointer max-w-[95px] xl:max-w-[120px] truncate ${
                 filters.tcStatus === 'Overdue'
                   ? 'text-red-700'
                   : filters.tcStatus === 'Pending'
@@ -148,7 +148,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             <button
               type="button"
               onClick={onReset}
-              className="flex items-center gap-1 px-2 py-0.5 text-xs text-red-700 hover:text-red-800 hover:bg-red-50 border border-red-200 rounded-sm transition-colors cursor-pointer shrink-0"
+              className="flex items-center gap-1 px-1.5 py-0.5 text-xs text-red-700 hover:text-red-800 hover:bg-red-50 border border-red-200 rounded-sm transition-colors cursor-pointer shrink-0"
               title="Reset all filters"
             >
               <RotateCcw className="w-3 h-3" />
@@ -157,20 +157,20 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           )}
         </div>
 
-        {/* Right: Quick Search + Counter (Never hidden on zoom) */}
-        <div className="flex items-center gap-2 grow sm:grow-0 ml-auto justify-end shrink-0">
-          <div className="relative w-full min-w-[180px] sm:w-56">
+        {/* Right: Quick Search + Counter in Same Line */}
+        <div className="flex items-center gap-1.5 shrink min-w-[160px] max-w-[260px] ml-auto">
+          <div className="relative w-full">
             <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               placeholder="Search PI, Inv #, TC #, Buyer..."
               value={filters.searchQuery}
               onChange={(e) => onFilterChange({ searchQuery: e.target.value })}
-              className="w-full pl-7 pr-2 py-1 text-xs bg-slate-50 border border-slate-300 rounded-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:border-[#1e3a8a] focus:bg-white"
+              className="w-full pl-7 pr-2 py-0.5 text-xs bg-slate-50 border border-slate-300 rounded-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:border-[#1e3a8a] focus:bg-white truncate"
             />
           </div>
-          <span className="text-[11px] font-mono text-slate-600 shrink-0 whitespace-nowrap bg-slate-100 px-2 py-0.5 rounded-sm border border-slate-200">
-            <strong className="text-slate-900">{totalResults}</strong> found
+          <span className="text-[11px] font-mono text-slate-600 shrink-0 whitespace-nowrap bg-slate-100 px-1.5 py-0.5 rounded-sm border border-slate-200">
+            <strong className="text-slate-900">{totalResults}</strong>
           </span>
         </div>
       </div>
