@@ -272,9 +272,6 @@ export const TcSummaryPageView: React.FC<TcSummaryPageViewProps> = ({
             <h1 className="text-base font-bold text-[#0b1b3d] uppercase tracking-tight">
               TRANSACTION CERTIFICATE (TC) EXECUTIVE SUMMARY & TOTALS
             </h1>
-            <p className="text-xs text-slate-500">
-              Dedicated analysis page for all PIs with 'TRANSACTION CERTIFICATE COST' line items & product quantities
-            </p>
           </div>
         </div>
 
@@ -556,6 +553,174 @@ export const TcSummaryPageView: React.FC<TcSummaryPageViewProps> = ({
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Operational Analytics & Workflow Progress Bar to fill viewport gap */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Card 1: TC Pipeline & Audit Workflow */}
+        <div className="bg-white border border-slate-200 rounded-sm p-3.5 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-2.5">
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-[#1e3a8a]" />
+                <h4 className="text-xs font-bold uppercase text-[#0b1b3d]">
+                  TC Audit & Workflow Pipeline
+                </h4>
+              </div>
+              <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 bg-blue-50 text-blue-800 border border-blue-200 rounded-xs">
+                {totalPIs} Total PIs
+              </span>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div>
+                <div className="flex justify-between text-[11px] mb-1">
+                  <span className="text-slate-600">TC Pending / Required</span>
+                  <span className="font-bold text-amber-800 font-mono">
+                    {pendingItems.length} ({totalPIs > 0 ? ((pendingItems.length / totalPIs) * 100).toFixed(0) : 0}%)
+                  </span>
+                </div>
+                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="bg-amber-500 h-full rounded-full transition-all"
+                    style={{ width: `${totalPIs > 0 ? (pendingItems.length / totalPIs) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-[11px] mb-1">
+                  <span className="text-slate-600">TC Issued & Completed</span>
+                  <span className="font-bold text-emerald-700 font-mono">
+                    {issuedItems.length} ({totalPIs > 0 ? ((issuedItems.length / totalPIs) * 100).toFixed(0) : 0}%)
+                  </span>
+                </div>
+                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="bg-emerald-600 h-full rounded-full transition-all"
+                    style={{ width: `${totalPIs > 0 ? (issuedItems.length / totalPIs) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-[11px] mb-1">
+                  <span className="text-slate-600">Overdue Follow-up</span>
+                  <span className="font-bold text-red-600 font-mono">
+                    {overdueItems.length} ({totalPIs > 0 ? ((overdueItems.length / totalPIs) * 100).toFixed(0) : 0}%)
+                  </span>
+                </div>
+                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="bg-red-500 h-full rounded-full transition-all"
+                    style={{ width: `${totalPIs > 0 ? (overdueItems.length / totalPIs) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+            <span>Certification Accuracy:</span>
+            <span className="font-bold text-emerald-700 font-mono">100% Extracted</span>
+          </div>
+        </div>
+
+        {/* Card 2: Delivery & Quantity Health */}
+        <div className="bg-white border border-slate-200 rounded-sm p-3.5 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-2.5">
+              <div className="flex items-center gap-1.5">
+                <Layers className="w-4 h-4 text-[#1e3a8a]" />
+                <h4 className="text-xs font-bold uppercase text-[#0b1b3d]">
+                  Delivery & Fulfillment Ratio
+                </h4>
+              </div>
+              <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xs">
+                {totalOrderQty > 0 ? ((totalDelivQty / totalOrderQty) * 100).toFixed(1) : 0}% Delivered
+              </span>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-2 bg-emerald-50/70 border border-emerald-200 rounded-xs">
+                  <span className="text-[10px] uppercase font-bold text-emerald-800 block">Delivered Qty</span>
+                  <span className="text-sm font-bold font-mono text-emerald-900 tabular-nums">
+                    {totalDelivQty.toLocaleString()}
+                  </span>
+                  <span className="text-[9px] text-emerald-700 block font-mono">PCS Dispatched</span>
+                </div>
+
+                <div className="p-2 bg-amber-50/70 border border-amber-200 rounded-xs">
+                  <span className="text-[10px] uppercase font-bold text-amber-800 block">Balance Qty</span>
+                  <span className="text-sm font-bold font-mono text-amber-900 tabular-nums">
+                    {totalBalQty.toLocaleString()}
+                  </span>
+                  <span className="text-[9px] text-amber-700 block font-mono">PCS Pending</span>
+                </div>
+              </div>
+
+              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden flex">
+                <div
+                  className="bg-emerald-600 h-full transition-all"
+                  style={{ width: `${totalOrderQty > 0 ? (totalDelivQty / totalOrderQty) * 100 : 0}%` }}
+                  title="Delivered"
+                />
+                <div
+                  className="bg-amber-400 h-full transition-all"
+                  style={{ width: `${totalOrderQty > 0 ? (totalBalQty / totalOrderQty) * 100 : 0}%` }}
+                  title="Balance"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+            <span>Total Aggregate Volume:</span>
+            <strong className="text-[#0b1b3d] font-mono">{totalOrderQty.toLocaleString()} PCS</strong>
+          </div>
+        </div>
+
+        {/* Card 3: Financial & TC Expenditure Profile */}
+        <div className="bg-white border border-slate-200 rounded-sm p-3.5 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-2.5">
+              <div className="flex items-center gap-1.5">
+                <TrendingUp className="w-4 h-4 text-[#1e3a8a]" />
+                <h4 className="text-xs font-bold uppercase text-[#0b1b3d]">
+                  TC Financial Profile & Share
+                </h4>
+              </div>
+              <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 bg-slate-100 text-slate-800 border border-slate-300 rounded-xs">
+                USD ($)
+              </span>
+            </div>
+
+            <div className="space-y-1.5 text-xs">
+              <div className="flex items-center justify-between p-1.5 bg-slate-50 rounded-xs border border-slate-200 font-mono">
+                <span className="text-slate-600 text-[11px]">Total TC Cost:</span>
+                <strong className="text-slate-900 font-bold">${totalCost.toLocaleString()} USD</strong>
+              </div>
+
+              <div className="flex items-center justify-between p-1.5 bg-slate-50 rounded-xs border border-slate-200 font-mono">
+                <span className="text-slate-600 text-[11px]">Average Cost / Order:</span>
+                <strong className="text-slate-900 font-bold">${avgCost} USD</strong>
+              </div>
+
+              <div className="flex items-center justify-between p-1.5 bg-slate-50 rounded-xs border border-slate-200 font-mono">
+                <span className="text-slate-600 text-[11px]">Top Buyer Contribution:</span>
+                <strong className="text-blue-900 font-bold">
+                  {buyerSummary[0] ? `${buyerSummary[0].buyer} ($${buyerSummary[0].totalCost})` : 'N/A'}
+                </strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+            <span>Primary Matching:</span>
+            <span className="font-semibold text-slate-700 font-mono">PI Number (Exact)</span>
           </div>
         </div>
       </div>

@@ -148,18 +148,12 @@ export const ExcelUploadView: React.FC<ExcelUploadViewProps> = ({
   return (
     <div className="space-y-4">
       {/* Top Banner */}
-      <div className="bg-[#0b1b3d] text-white p-5 rounded-sm border border-[#16294d] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5 text-blue-300" />
-            <h2 className="text-base font-bold font-mono tracking-tight uppercase">
-              TRANSACTION CERTIFICATE COST EXTRACTOR & SUMMARY
-            </h2>
-          </div>
-          <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-            The system scans the <strong className="text-white">Model</strong> and <strong className="text-white">Description</strong> columns for{' '}
-            <strong className="text-white underline decoration-blue-400">TRANSACTION CERTIFICATE COST</strong>. It isolates only the PIs where this line item exists, extracts the TC Cost, removes all other items, and generates an executive summary.
-          </p>
+      <div className="bg-[#0b1b3d] text-white p-4 rounded-sm border border-[#16294d] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <FileSpreadsheet className="w-5 h-5 text-blue-300" />
+          <h2 className="text-base font-bold font-mono tracking-tight uppercase">
+            TRANSACTION CERTIFICATE COST EXTRACTOR & SUMMARY
+          </h2>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
