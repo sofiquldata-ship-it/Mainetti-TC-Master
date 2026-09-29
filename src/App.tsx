@@ -370,7 +370,7 @@ export default function App() {
       return actual === 'Final TC Received' || actual === 'Issued';
     }).length;
     const totalTcCost = filteredData.reduce((acc, curr) => acc + curr.tcCost, 0);
-    const overdue = filteredData.filter((i) => i.tcStatus === 'Overdue').length;
+    const overdue = filteredData.filter((i) => computeAutomatedTcStatus(i) === 'Overdue' || i.tcStatus === 'Overdue').length;
 
     return {
       totalPi,

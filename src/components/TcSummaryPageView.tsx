@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { PIData } from '../types/tc';
+import { PIData, computeAutomatedTcStatus } from '../types/tc';
 import {
   BarChart3,
   DollarSign,
@@ -86,10 +86,21 @@ export const TcSummaryPageView: React.FC<TcSummaryPageViewProps> = ({
   }, 0);
 
   const totalBalQty = Math.max(0, totalOrderQty - totalDelivQty);
-  const overdueItems = activeData.filter((i) => i.tcStatus === 'Overdue');
+  const overdueItems = activeData.filter((i) => {
+    const st = computeAutomatedTcStatus(i);
+    return st === 'Overdue' || i.tcStatus === 'Overdue';
+  });
   const overdueCost = overdueItems.reduce((sum, i) => sum + i.tcCost, 0);
-  const pendingItems = activeData.filter((i) => i.tcStatus === 'Pending' || i.tcStatus === 'Required' || i.tcStatus === 'Under Review');
-  const issuedItems = activeData.filter((i) => i.tcStatus === 'Issued');
+  const pendingItems = activeData.filter((i) => {
+    const st = computeAutomatedTcStatus(i);
+    const actual = st !== 'Not Requested' ? st : i.tcStatus;
+    return actual !== 'Final TC Received' && actual !== 'Issued' && actual !== 'Overdue';
+  });
+  const issuedItems = activeData.filter((i) => {
+    const st = computeAutomatedTcStatus(i);
+    const actual = st !== 'Not Requested' ? st : i.tcStatus;
+    return actual === 'Final TC Received' || actual === 'Issued';
+  });
 
   // Buyer Summary Breakdown
   const buyerSummary = useMemo(() => {
@@ -147,8 +158,10 @@ export const TcSummaryPageView: React.FC<TcSummaryPageViewProps> = ({
       map[b].totalDelivQty += safeDelivQ;
       map[b].totalBalQty += safeBalQ;
       map[b].totalCost += item.tcCost;
-      if (item.tcStatus === 'Issued') map[b].issued += 1;
-      else if (item.tcStatus === 'Overdue') map[b].overdue += 1;
+      const computedSt = computeAutomatedTcStatus(item);
+      const actualSt = computedSt !== 'Not Requested' ? computedSt : item.tcStatus;
+      if (actualSt === 'Final TC Received' || actualSt === 'Issued') map[b].issued += 1;
+      else if (actualSt === 'Overdue') map[b].overdue += 1;
       else map[b].pending += 1;
     });
 

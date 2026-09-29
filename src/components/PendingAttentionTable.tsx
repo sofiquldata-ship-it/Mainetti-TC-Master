@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { PIData, TCStatus, computeAutomatedTcStatus } from '../types/tc';
+import { PIData, TCStatus, computeAutomatedTcStatus, calculatePiAgeDays } from '../types/tc';
 import { BatchUpdateModal } from './BatchUpdateModal';
 import {
   ArrowUpDown,
@@ -46,22 +46,6 @@ type SortField =
   | 'finalTcReceivedDate'
   | 'tcNumber'
   | 'tcStatus';
-
-// Helper function to calculate exact Age in Days from Order Date to Today
-export const calculatePiAgeDays = (orderDateStr: string, fallbackAge?: number): number => {
-  if (!orderDateStr || orderDateStr === '-' || orderDateStr.trim() === '') {
-    return fallbackAge || 0;
-  }
-  const orderDate = new Date(orderDateStr);
-  if (isNaN(orderDate.getTime())) {
-    return fallbackAge || 0;
-  }
-  const today = new Date();
-  const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
-  const orderUtc = Date.UTC(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate());
-  const diffDays = Math.floor((todayUtc - orderUtc) / (1000 * 60 * 60 * 24));
-  return diffDays >= 0 ? diffDays : 0;
-};
 
 export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
   data,
@@ -747,6 +731,11 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                 const isBatchSelected = selectedIds.includes(pi.id);
                 const autoStatus = computeAutomatedTcStatus(pi);
                 const currentStatus = autoStatus !== 'Not Requested' ? autoStatus : (pi.tcStatus || 'Not Requested');
+                const isFinalReceived = Boolean(
+                  (pi.finalTcReceivedDate && pi.finalTcReceivedDate.trim() !== '') ||
+                  currentStatus === 'Final TC Received' ||
+                  currentStatus === 'Issued'
+                );
 
                 const rawOrderQ = pi.orderQuantity ?? pi.quantityPcs ?? 0;
                 let orderQ = rawOrderQ <= 1 ? 0 : rawOrderQ;
@@ -772,9 +761,11 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                     onClick={() => onSelectPI(pi)}
                     className={`transition-colors cursor-pointer group ${
                       isBatchSelected
-                        ? 'bg-blue-100/70 hover:bg-blue-100 font-medium'
+                        ? 'bg-blue-100/80 hover:bg-blue-100 font-medium'
                         : isSelected
-                        ? 'bg-blue-50/80 hover:bg-blue-100/80 font-medium'
+                        ? 'bg-blue-50/90 hover:bg-blue-100/80 font-medium'
+                        : isFinalReceived
+                        ? 'bg-emerald-50/60 hover:bg-emerald-100/70'
                         : idx % 2 === 0
                         ? 'bg-white hover:bg-slate-50'
                         : 'bg-[#fafbfc] hover:bg-slate-50'
@@ -782,7 +773,17 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                   >
                     {/* 0. CHECKBOX - FROZEN LEFT */}
                     <td
-                      className="py-1.5 px-2 text-center border-r border-slate-100 sticky left-0 z-10 bg-inherit w-9 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]"
+                      className={`py-1.5 px-2 text-center border-r border-slate-100 sticky left-0 z-10 w-9 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)] ${
+                        isBatchSelected
+                          ? 'bg-blue-100'
+                          : isSelected
+                          ? 'bg-blue-50'
+                          : isFinalReceived
+                          ? 'bg-[#ecfdf5]'
+                          : idx % 2 === 0
+                          ? 'bg-white'
+                          : 'bg-[#fafbfc]'
+                      }`}
                       onClick={(e) => e.stopPropagation()}
                     >
                       <input
@@ -794,23 +795,58 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                     </td>
 
                     {/* 1. ORDER DATE - FROZEN LEFT */}
-                    <td className="py-1.5 px-2.5 font-mono font-medium text-slate-800 whitespace-nowrap tabular-nums border-r border-slate-100 sticky left-[36px] z-10 bg-inherit shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]">
+                    <td
+                      className={`py-1.5 px-2.5 font-mono whitespace-nowrap tabular-nums border-r border-slate-100 sticky left-[36px] z-10 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)] ${
+                        isFinalReceived
+                          ? 'text-emerald-900 font-bold bg-[#ecfdf5]'
+                          : isBatchSelected
+                          ? 'text-slate-900 font-medium bg-blue-100'
+                          : isSelected
+                          ? 'text-slate-900 font-medium bg-blue-50'
+                          : idx % 2 === 0
+                          ? 'text-slate-800 font-medium bg-white'
+                          : 'text-slate-800 font-medium bg-[#fafbfc]'
+                      }`}
+                    >
                       <span>{pi.orderDate}</span>
                     </td>
 
                     {/* 2. AGE (DAYS) - FROZEN LEFT */}
-                    <td className="py-1.5 px-2 text-center font-mono font-medium whitespace-nowrap tabular-nums border-r border-slate-100 sticky left-[125px] z-10 bg-inherit shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]">
+                    <td
+                      className={`py-1.5 px-2 text-center font-mono font-medium whitespace-nowrap tabular-nums border-r border-slate-100 sticky left-[125px] z-10 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)] ${
+                        isFinalReceived
+                          ? 'bg-[#ecfdf5]'
+                          : isBatchSelected
+                          ? 'bg-blue-100'
+                          : isSelected
+                          ? 'bg-blue-50'
+                          : idx % 2 === 0
+                          ? 'bg-white'
+                          : 'bg-[#fafbfc]'
+                      }`}
+                    >
                       {(() => {
                         const calculatedDays = calculatePiAgeDays(pi.orderDate, pi.piAgeDays);
+                        const isOverdue = !isFinalReceived && calculatedDays > 360;
+
                         return (
                           <span
-                            className={`inline-block px-1.5 py-0.5 rounded-xs text-[10px] font-bold font-mono ${
-                              calculatedDays >= 90
-                                ? 'bg-red-100 text-red-800 border border-red-300'
-                                : calculatedDays >= 40
-                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                                : 'bg-slate-100 text-slate-700 border border-slate-300'
+                            className={`inline-block px-1.5 py-0.5 rounded-xs text-[10px] font-mono ${
+                              isFinalReceived
+                                ? 'bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold'
+                                : isOverdue
+                                ? 'bg-red-100 text-red-800 border border-red-400 font-black animate-pulse shadow-2xs'
+                                : calculatedDays >= 180
+                                ? 'bg-amber-50 text-amber-900 border border-amber-200 font-medium'
+                                : 'bg-slate-100 text-slate-700 border border-slate-300 font-medium'
                             }`}
+                            title={
+                              isFinalReceived
+                                ? `Order Age: ${calculatedDays} Days (Final TC Received)`
+                                : isOverdue
+                                ? `OVERDUE: ${calculatedDays} Days (> 360 days and Final TC not received)`
+                                : `Order Age: ${calculatedDays} Days`
+                            }
                           >
                             {calculatedDays} Days
                           </span>
@@ -819,14 +855,32 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                     </td>
 
                     {/* 3. PI NO - FROZEN LEFT */}
-                    <td className="py-1.5 px-2.5 font-mono font-bold text-[#0b1b3d] whitespace-nowrap border-r border-slate-100 sticky left-[205px] z-10 bg-inherit shadow-[4px_0_6px_-2px_rgba(0,0,0,0.08)]">
+                    <td
+                      className={`py-1.5 px-2.5 font-mono whitespace-nowrap border-r border-slate-100 sticky left-[205px] z-10 shadow-[4px_0_6px_-2px_rgba(0,0,0,0.08)] ${
+                        isFinalReceived
+                          ? 'text-emerald-950 font-black bg-[#ecfdf5]'
+                          : isBatchSelected
+                          ? 'text-[#0b1b3d] font-bold bg-blue-100'
+                          : isSelected
+                          ? 'text-[#0b1b3d] font-bold bg-blue-50'
+                          : idx % 2 === 0
+                          ? 'text-[#0b1b3d] font-bold bg-white'
+                          : 'text-[#0b1b3d] font-bold bg-[#fafbfc]'
+                      }`}
+                    >
                       <span className="group-hover:underline underline-offset-2">{pi.piNumber}</span>
                     </td>
 
                     {/* 3.5. INVOICE NUMBER */}
-                    <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-slate-100 font-mono text-slate-800 font-semibold">
+                    <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-slate-100 font-mono">
                       {pi.invoiceNumber ? (
-                        <span className="px-2 py-0.5 bg-blue-50 border border-blue-300 text-blue-950 rounded-xs text-[10px] font-bold inline-block shadow-2xs">
+                        <span
+                          className={`px-2 py-0.5 rounded-xs text-[10px] font-bold inline-block shadow-2xs ${
+                            isFinalReceived
+                              ? 'bg-emerald-100 border border-emerald-300 text-emerald-950'
+                              : 'bg-blue-50 border border-blue-300 text-blue-950'
+                          }`}
+                        >
                           {pi.invoiceNumber}
                         </span>
                       ) : (
@@ -837,29 +891,51 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                     </td>
 
                     {/* 4. BUYER */}
-                    <td className="py-1.5 px-2.5 font-semibold text-slate-900 whitespace-nowrap border-r border-slate-100">
+                    <td
+                      className={`py-1.5 px-2.5 whitespace-nowrap border-r border-slate-100 ${
+                        isFinalReceived ? 'font-bold text-emerald-950' : 'font-semibold text-slate-900'
+                      }`}
+                    >
                       {pi.buyer}
                     </td>
 
                     {/* 5. CUSTOMER */}
-                    <td className="py-1.5 px-2.5 text-slate-700 whitespace-nowrap border-r border-slate-100 truncate max-w-[180px]">
+                    <td
+                      className={`py-1.5 px-2.5 whitespace-nowrap border-r border-slate-100 truncate max-w-[180px] ${
+                        isFinalReceived ? 'font-semibold text-emerald-900' : 'text-slate-700'
+                      }`}
+                    >
                       {pi.customer}
                     </td>
 
                     {/* 6. CONTACT PERSON */}
-                    <td className="py-1.5 px-2.5 font-medium text-slate-800 whitespace-nowrap border-r border-slate-100">
-                      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.2 rounded-xs text-[10px]">
+                    <td className="py-1.5 px-2.5 font-medium whitespace-nowrap border-r border-slate-100">
+                      <span
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded-xs text-[10px] ${
+                          isFinalReceived
+                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-200 font-semibold'
+                            : 'bg-slate-100 text-slate-700 border border-slate-200'
+                        }`}
+                      >
                         {pi.contactPerson || 'System'}
                       </span>
                     </td>
 
                     {/* 7. ORDER QUANTITY */}
-                    <td className="py-1.5 px-2.5 font-mono text-right text-slate-900 font-semibold whitespace-nowrap tabular-nums border-r border-slate-100">
+                    <td
+                      className={`py-1.5 px-2.5 font-mono text-right whitespace-nowrap tabular-nums border-r border-slate-100 ${
+                        isFinalReceived ? 'font-bold text-emerald-950' : 'font-semibold text-slate-900'
+                      }`}
+                    >
                       {orderQ.toLocaleString()}
                     </td>
 
                     {/* 8. DELIVERY QUANTITY */}
-                    <td className="py-1.5 px-2.5 font-mono text-right text-emerald-800 font-medium whitespace-nowrap tabular-nums border-r border-slate-100">
+                    <td
+                      className={`py-1.5 px-2.5 font-mono text-right whitespace-nowrap tabular-nums border-r border-slate-100 ${
+                        isFinalReceived ? 'font-bold text-emerald-900' : 'font-medium text-emerald-800'
+                      }`}
+                    >
                       {delivQ.toLocaleString()}
                     </td>
 
@@ -867,7 +943,11 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                     <td className="py-1.5 px-2.5 font-mono text-right whitespace-nowrap tabular-nums border-r border-slate-100">
                       <span
                         className={`font-semibold ${
-                          balQ > 0 ? 'text-amber-800' : 'text-slate-400'
+                          isFinalReceived && balQ === 0
+                            ? 'text-emerald-700'
+                            : balQ > 0
+                            ? 'text-amber-800'
+                            : 'text-slate-400'
                         }`}
                       >
                         {balQ.toLocaleString()}
@@ -876,28 +956,48 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
 
                     {/* 10. DELIVERY STATUS */}
                     <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-slate-100">
-                      <span className="font-medium text-slate-800 text-[10px]">
+                      <span
+                        className={`text-[10px] ${
+                          isFinalReceived ? 'font-bold text-emerald-900' : 'font-medium text-slate-800'
+                        }`}
+                      >
                         {pi.deliveryStatus}
                       </span>
                     </td>
 
                     {/* 11. TC REQUEST DATE */}
-                    <td className="py-1.5 px-2.5 font-mono text-slate-700 whitespace-nowrap border-r border-slate-100">
+                    <td
+                      className={`py-1.5 px-2.5 font-mono whitespace-nowrap border-r border-slate-100 ${
+                        isFinalReceived ? 'text-emerald-900 font-medium' : 'text-slate-700'
+                      }`}
+                    >
                       {pi.tcRequestDate || <span className="text-slate-300">-</span>}
                     </td>
 
                     {/* 10. RECEIVED COMMERCIAL DOC DATE */}
-                    <td className="py-1.5 px-2.5 font-mono text-slate-700 whitespace-nowrap border-r border-slate-100">
+                    <td
+                      className={`py-1.5 px-2.5 font-mono whitespace-nowrap border-r border-slate-100 ${
+                        isFinalReceived ? 'text-emerald-900 font-medium' : 'text-slate-700'
+                      }`}
+                    >
                       {pi.receivedCommercialDocDate || <span className="text-slate-300">-</span>}
                     </td>
 
                     {/* 11. DRAFT TC DATE */}
-                    <td className="py-1.5 px-2.5 font-mono text-slate-700 whitespace-nowrap border-r border-slate-100">
+                    <td
+                      className={`py-1.5 px-2.5 font-mono whitespace-nowrap border-r border-slate-100 ${
+                        isFinalReceived ? 'text-emerald-900 font-medium' : 'text-slate-700'
+                      }`}
+                    >
                       {pi.draftTcDate || <span className="text-slate-300">-</span>}
                     </td>
 
                     {/* 12. DRAFT CONFIRMATION DATE */}
-                    <td className="py-1.5 px-2.5 font-mono text-slate-700 whitespace-nowrap border-r border-slate-100">
+                    <td
+                      className={`py-1.5 px-2.5 font-mono whitespace-nowrap border-r border-slate-100 ${
+                        isFinalReceived ? 'text-emerald-900 font-medium' : 'text-slate-700'
+                      }`}
+                    >
                       {pi.draftConfirmationDate || <span className="text-slate-300">-</span>}
                     </td>
 
@@ -913,19 +1013,29 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                     </td>
 
                     {/* 14. FINAL TC APPLY DATE */}
-                    <td className="py-1.5 px-2.5 font-mono text-slate-700 whitespace-nowrap border-r border-slate-100">
+                    <td
+                      className={`py-1.5 px-2.5 font-mono whitespace-nowrap border-r border-slate-100 ${
+                        isFinalReceived ? 'text-emerald-900 font-medium' : 'text-slate-700'
+                      }`}
+                    >
                       {pi.finalTcApplyDate || <span className="text-slate-300">-</span>}
                     </td>
 
                     {/* 15. FINAL TC RECEIVED DATE */}
-                    <td className="py-1.5 px-2.5 font-mono text-emerald-800 font-semibold whitespace-nowrap border-r border-slate-100">
+                    <td className="py-1.5 px-2.5 font-mono text-emerald-800 font-bold whitespace-nowrap border-r border-slate-100">
                       {pi.finalTcReceivedDate || <span className="text-slate-300">-</span>}
                     </td>
 
                     {/* 16. TC NUMBER */}
-                    <td className="py-1.5 px-2.5 font-mono font-bold text-[#0b1b3d] whitespace-nowrap border-r border-slate-100">
+                    <td className="py-1.5 px-2.5 font-mono font-bold whitespace-nowrap border-r border-slate-100">
                       {pi.tcNumber ? (
-                        <span className="bg-blue-50 text-blue-900 px-1.5 py-0.5 rounded-xs border border-blue-200">
+                        <span
+                          className={`px-1.5 py-0.5 rounded-xs border ${
+                            isFinalReceived
+                              ? 'bg-emerald-100 text-emerald-950 border-emerald-300'
+                              : 'bg-blue-50 text-blue-900 border-blue-200'
+                          }`}
+                        >
                           {pi.tcNumber}
                         </span>
                       ) : (
@@ -936,8 +1046,12 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                     {/* 17. TC STATUS (Auto Determined) - FROZEN / STICKY RIGHT */}
                     <td
                       className={`py-1.5 px-3 whitespace-nowrap sticky right-0 z-10 border-l border-slate-200 shadow-[-6px_0_10px_-2px_rgba(0,0,0,0.08)] ${
-                        isSelected
+                        isBatchSelected
                           ? 'bg-blue-100'
+                          : isSelected
+                          ? 'bg-blue-50'
+                          : isFinalReceived
+                          ? 'bg-[#ecfdf5]'
                           : idx % 2 === 0
                           ? 'bg-white group-hover:bg-slate-50'
                           : 'bg-[#fafbfc] group-hover:bg-slate-50'

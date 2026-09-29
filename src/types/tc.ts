@@ -90,8 +90,28 @@ export interface PIData {
 }
 
 /**
- * Automatically determine TC Status strictly based on workflow dates:
- * Final TC Received (Date) → Final TC Applied (Date) → Draft Confirmed (Date) → Revision → Draft TC Received (Date) → Commercial Doc Received (Date) → TC Requested (Date)
+ * Calculate exact Age in Days from Order Date to Today (or fallback to stored age)
+ */
+export function calculatePiAgeDays(orderDateStr?: string, fallbackAge?: number): number {
+  if (!orderDateStr || orderDateStr === '-' || orderDateStr.trim() === '') {
+    return fallbackAge || 0;
+  }
+  const orderDate = new Date(orderDateStr);
+  if (isNaN(orderDate.getTime())) {
+    return fallbackAge || 0;
+  }
+  const today = new Date();
+  const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  const orderUtc = Date.UTC(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate());
+  const diffDays = Math.floor((todayUtc - orderUtc) / (1000 * 60 * 60 * 24));
+  return diffDays >= 0 ? diffDays : (fallbackAge || 0);
+}
+
+/**
+ * Automatically determine TC Status strictly based on workflow dates & age:
+ * 1. Final TC Received (Date) → Complete
+ * 2. Overdue: If Age > 360 Days and Final TC is NOT received
+ * 3. Final TC Applied (Date) → Draft Confirmed (Date) → Revision → Draft TC Received (Date) → Commercial Doc Received (Date) → TC Requested (Date) → Not Requested
  */
 export function computeAutomatedTcStatus(item: Partial<PIData>): TCStatus {
   // 1. Final TC Received ONLY if finalTcReceivedDate is filled in
@@ -99,17 +119,23 @@ export function computeAutomatedTcStatus(item: Partial<PIData>): TCStatus {
     return 'Final TC Received';
   }
 
-  // 2. Final TC Applied ONLY if finalTcApplyDate is filled in
+  // 2. Strict Rule: If Age > 360 days and Final TC is NOT received -> OVERDUE
+  const ageDays = calculatePiAgeDays(item.orderDate, item.piAgeDays);
+  if (ageDays > 360) {
+    return 'Overdue';
+  }
+
+  // 3. Final TC Applied ONLY if finalTcApplyDate is filled in
   if (item.finalTcApplyDate && item.finalTcApplyDate.trim() !== '') {
     return 'Final TC Applied';
   }
 
-  // 3. Draft Confirmed if draft confirmation date is filled in
+  // 4. Draft Confirmed if draft confirmation date is filled in
   if (item.draftConfirmationDate && item.draftConfirmationDate.trim() !== '') {
     return 'Draft Confirmed';
   }
 
-  // 4. Revision ONLY if revisionQty > 0 and draft/comm doc dates exist
+  // 5. Revision ONLY if revisionQty > 0 and draft/comm doc dates exist
   if (
     item.revisionQty !== undefined &&
     item.revisionQty !== null &&
@@ -120,27 +146,27 @@ export function computeAutomatedTcStatus(item: Partial<PIData>): TCStatus {
     return 'Revision';
   }
 
-  // 5. Draft TC Received if draft TC date is filled in
+  // 6. Draft TC Received if draft TC date is filled in
   if (item.draftTcDate && item.draftTcDate.trim() !== '') {
     return 'Draft TC Received';
   }
 
-  // 6. Commercial Doc Received if receivedCommercialDocDate is filled in
+  // 7. Commercial Doc Received if receivedCommercialDocDate is filled in
   if (item.receivedCommercialDocDate && item.receivedCommercialDocDate.trim() !== '') {
     return 'Commercial Doc Received';
   }
 
-  // 7. TC Requested if tcRequestDate is filled in
+  // 8. TC Requested if tcRequestDate is filled in
   if (item.tcRequestDate && item.tcRequestDate.trim() !== '') {
     return 'TC Requested';
   }
 
-  // 8. Fallback: If tcNumber exists without dates
+  // 9. Fallback: If tcNumber exists without dates
   if (item.tcNumber && item.tcNumber.trim() !== '') {
     return 'Final TC Applied';
   }
 
-  // 9. Default: Not Requested when no workflow dates or TC numbers exist
+  // 10. Default: Not Requested when no workflow dates or TC numbers exist
   return 'Not Requested';
 }
 
