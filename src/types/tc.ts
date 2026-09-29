@@ -91,6 +91,29 @@ export interface PIData {
 }
 
 /**
+ * Known cancelled PIs identified by user or reports
+ */
+export const KNOWN_CANCELLED_PIS = new Set([
+  'MPBL/00789/2026',
+  'MPBL/02042/2026',
+  'MPBL/03305/2026',
+  'MPBL007892026',
+  'MPBL020422026',
+  'MPBL033052026',
+]);
+
+export function isCancelledPi(piNumber?: string): boolean {
+  if (!piNumber) return false;
+  const raw = String(piNumber).trim().toUpperCase();
+  const clean = raw.replace(/[^A-Z0-9]/g, '');
+  for (const c of KNOWN_CANCELLED_PIS) {
+    const cClean = c.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (raw === c || clean === cClean || clean.includes(cClean)) return true;
+  }
+  return false;
+}
+
+/**
  * Helper to identify if an order or status is Cancelled/Void
  */
 export function isCancelledStatus(val: any): boolean {
@@ -105,6 +128,18 @@ export function isCancelledStatus(val: any): boolean {
     s.includes('void') ||
     s.includes('dropped')
   );
+}
+
+/**
+ * Comprehensive check if an order or PI is Cancelled
+ */
+export function isCancelledOrder(item?: Partial<PIData> | null): boolean {
+  if (!item) return false;
+  if (isCancelledPi(item.piNumber)) return true;
+  if (isCancelledStatus(item.orderStatus)) return true;
+  if (isCancelledStatus(item.deliveryStatus)) return true;
+  if (isCancelledStatus(item.tcStatus)) return true;
+  return false;
 }
 
 /**

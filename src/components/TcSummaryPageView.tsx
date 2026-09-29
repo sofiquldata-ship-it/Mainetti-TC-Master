@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { PIData, computeAutomatedTcStatus, isCancelledStatus } from '../types/tc';
+import { PIData, computeAutomatedTcStatus, isCancelledStatus, isCancelledOrder, isCancelledPi } from '../types/tc';
 import {
   BarChart3,
   DollarSign,
@@ -43,6 +43,8 @@ export const TcSummaryPageView: React.FC<TcSummaryPageViewProps> = ({
   const activeData = useMemo(() => {
     const uncancelled = data.filter(
       (d) =>
+        !isCancelledOrder(d) &&
+        !isCancelledPi(d.piNumber) &&
         !isCancelledStatus(d.orderStatus) &&
         !isCancelledStatus(d.deliveryStatus) &&
         !isCancelledStatus(d.tcStatus)

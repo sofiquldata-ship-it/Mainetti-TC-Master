@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { PIData, UploadedFileInfo, TCStatus, PaymentStatus, DeliveryStatus, computeAutomatedTcStatus, isCancelledStatus } from '../types/tc';
+import { PIData, UploadedFileInfo, TCStatus, PaymentStatus, DeliveryStatus, computeAutomatedTcStatus, isCancelledStatus, isCancelledOrder, isCancelledPi } from '../types/tc';
 
 const STORAGE_KEY_DATA = 'MAINETTI_TC_DATA_V1';
 const STORAGE_KEY_FILE_INFO = 'MAINETTI_TC_FILE_INFO_V1';
@@ -242,7 +242,17 @@ export async function parseExcelFile(
   const contactPersonCol = findColIndex(['createdby', 'created by', 'created_by', 'createdbyname', 'contact person', 'contactperson', 'creator', 'created user', 'entered by', 'prepared by', 'user', 'contact']);
   const orderDateCol = findColIndex(['order date', 'orderdate', 'po date', 'pi date', 'order dt', 'date']);
   const piAgeCol = findColIndex(['pi age', 'age', 'days', 'pi age days', 'ageing']);
-  const tcStatusCol = findColIndex(['tc status', 'tcstatus', 'status', 'cert status', 'tc stage', 'stage']);
+  const orderStatusCol = findColIndex([
+    'order status',
+    'orderstatus',
+    'po status',
+    'order state',
+    'order_status',
+    'order tracking',
+    'order state status',
+    'item status',
+  ]);
+  const tcStatusCol = findColIndex(['tc status', 'tcstatus', 'cert status', 'tc stage', 'stage', 'tc tracking']);
   const paymentStatusCol = findColIndex(['payment status', 'payment', 'paid status', 'payment terms', 'pay status']);
   const expectedDateCol = findColIndex(['expected tc date', 'expected date', 'tc date', 'target date', 'due date', 'eta', 'delivery date']);
   const deliveryStatusCol = findColIndex(['delivery status', 'delivery', 'shipment status', 'shipping', 'dispatch', 'ship status']);
@@ -293,16 +303,6 @@ export async function parseExcelFile(
   const gussetCol = findColIndex(['gusset', 'g(mm)', 'g (mm)', 'g', 'gusset(mm)', 'gusset mm', 'bottom gusset']);
   const flapCol = findColIndex(['flap', 'f(mm)', 'f (mm)', 'f', 'flap(mm)', 'flap mm', 'lip']);
   const pktBoxCol = findColIndex(['pkt/box', 'pkt / box', 'packet/box', 'pkt/ctn', 'pkt', 'box', 'boxes', 'cartons', 'ctn', 'pack/box', 'packet']);
-  const orderStatusCol = findColIndex([
-    'order status',
-    'orderstatus',
-    'po status',
-    'order state',
-    'order_status',
-    'order tracking',
-    'order state status',
-    'item status',
-  ]);
   
   // New TC-related columns
   const tcRequestDateCol = findColIndex(['tc request date', 'request date', 'tc requested date', 'tc request', 'request dt']);
@@ -469,28 +469,46 @@ export async function parseExcelFile(
     const normCust = customer.trim().toUpperCase();
     const groupKey = normCust ? `${normPi}||${normCust}` : normPi;
 
-    // Check for Order Status / Cancel Status in this row
+    // Check for Order Status / Cancel Status in this row or any cell
     const rawOrderStatus = orderStatusCol !== -1 ? getCell(orderStatusCol, '') : '';
     const rawTcStatus = getCell(tcStatusCol, '');
     const rawDelivStatus = deliveryStatusCol !== -1 ? getCell(deliveryStatusCol, '') : '';
 
-    if (
+    const isThisRowCancelled =
       isCancelledStatus(rawOrderStatus) ||
       isCancelledStatus(rawTcStatus) ||
       isCancelledStatus(rawDelivStatus) ||
+      isCancelledPi(piNumber) ||
       normRowText.includes('ordercancelled') ||
       normRowText.includes('ordercanceled') ||
-      normRowText.includes('statuscancel')
-    ) {
+      normRowText.includes('statuscancel') ||
+      rowArray.some((cell: any) => isCancelledStatus(cell));
+
+    if (isThisRowCancelled) {
       cancelledGroupKeys.add(groupKey);
       cancelledGroupKeys.add(normPi);
-      if (piGroups[groupKey]) {
-        delete piGroups[groupKey];
-      }
+      cancelledGroupKeys.add(piNumber);
+      // Remove ALL matching groups in piGroups for this PI Number
+      Object.keys(piGroups).forEach((k) => {
+        const itm = piGroups[k];
+        if (
+          k === groupKey ||
+          k === normPi ||
+          k.startsWith(`${normPi}||`) ||
+          (itm && (itm.piNumber === piNumber || isCancelledPi(itm.piNumber)))
+        ) {
+          delete piGroups[k];
+        }
+      });
       return;
     }
 
-    if (cancelledGroupKeys.has(groupKey) || cancelledGroupKeys.has(normPi)) {
+    if (
+      cancelledGroupKeys.has(groupKey) ||
+      cancelledGroupKeys.has(normPi) ||
+      cancelledGroupKeys.has(piNumber) ||
+      isCancelledPi(piNumber)
+    ) {
       return;
     }
 
@@ -593,6 +611,17 @@ export async function parseExcelFile(
   const allPIs = Object.values(piGroups);
 
   allPIs.forEach((group, idx) => {
+    // CRITICAL: Exclude any cancelled PI!
+    const cleanPi = group.piNumber.trim().toUpperCase();
+    if (
+      cancelledGroupKeys.has(cleanPi) ||
+      cancelledGroupKeys.has(group.piNumber) ||
+      isCancelledPi(group.piNumber) ||
+      isCancelledOrder(group as any)
+    ) {
+      return;
+    }
+
     // CRITICAL REQUIREMENT:
     // Keep ONLY PIs that have TRANSACTION CERTIFICATE COST added!
     if (group.hasExplicitTcCostLine && group.tcCostSum > 0) {
@@ -791,9 +820,12 @@ export async function parseExcelFile(
 }
 
 // Sanitize PIData to guarantee any Order Quantity of 1 (or <= 1) becomes 0,
-// and if Balance Quantity is 1, subtract 1 from Order Quantity so Balance becomes 0
+// and if Balance Quantity is 1, subtract 1 from Order Quantity so Balance becomes 0,
+// and strictly exclude any cancelled orders or PIs
 export function sanitizePidData(list: PIData[]): PIData[] {
-  return list.map((item) => {
+  return list
+    .filter((item) => !isCancelledOrder(item) && !isCancelledPi(item.piNumber))
+    .map((item) => {
     let rawOrderQ = item.orderQuantity ?? item.quantityPcs ?? 0;
     let cleanOrderQ = rawOrderQ <= 1 ? 0 : rawOrderQ;
     const rawDelivQ = item.deliveryQuantity ?? 0;

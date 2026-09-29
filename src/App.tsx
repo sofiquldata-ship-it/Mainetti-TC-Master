@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { PIData, FilterState, TCStatus, UploadedFileInfo, computeAutomatedTcStatus, isCancelledStatus } from './types/tc';
+import { PIData, FilterState, TCStatus, UploadedFileInfo, computeAutomatedTcStatus, isCancelledStatus, isCancelledOrder, isCancelledPi } from './types/tc';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { FilterBar } from './components/FilterBar';
@@ -31,16 +31,18 @@ import { User } from 'firebase/auth';
 import { UploadCloud, FileSpreadsheet, PlusCircle } from 'lucide-react';
 
 export default function App() {
-  // Initialize state with persistent storage if available
+  // Initialize state with persistent storage if available (strictly excluding cancelled PIs)
   const [piList, setPiList] = useState<PIData[]>(() => {
     const saved = loadFromPersistentStorage();
     if (saved.data && saved.data.length > 0) {
-      return saved.data.map((item) => ({
-        ...item,
-        invoiceNumber: item.invoiceNumber || '',
-        contactPerson: item.contactPerson || 'System',
-        tcStatus: computeAutomatedTcStatus(item),
-      }));
+      return saved.data
+        .filter((item) => !isCancelledOrder(item) && !isCancelledPi(item.piNumber))
+        .map((item) => ({
+          ...item,
+          invoiceNumber: item.invoiceNumber || '',
+          contactPerson: item.contactPerson || 'System',
+          tcStatus: computeAutomatedTcStatus(item),
+        }));
     }
     return [];
   });
@@ -49,6 +51,18 @@ export default function App() {
     const saved = loadFromPersistentStorage();
     return saved.fileInfo;
   });
+
+  // Self-healing effect: immediately clean persistent storage if any cancelled PIs linger
+  useEffect(() => {
+    const saved = loadFromPersistentStorage();
+    if (saved.data && saved.data.length > 0) {
+      const purged = saved.data.filter((item) => !isCancelledOrder(item) && !isCancelledPi(item.piNumber));
+      if (purged.length !== saved.data.length) {
+        saveToPersistentStorage(purged, saved.fileInfo);
+        setPiList(purged);
+      }
+    }
+  }, []);
 
   const [selectedPi, setSelectedPi] = useState<PIData | null>(null);
   const [activeTab, setActiveTab] = useState<string>(() => {
@@ -106,12 +120,14 @@ export default function App() {
       // 2. Fetch master PI dataset from Firestore if available
       const cloudPiList = await fetchPIDataFromFirestore();
       if (cloudPiList && cloudPiList.length > 0) {
-        const cleaned = cloudPiList.map((item) => ({
-          ...item,
-          invoiceNumber: item.invoiceNumber || '',
-          contactPerson: item.contactPerson || 'System',
-          tcStatus: computeAutomatedTcStatus(item),
-        }));
+        const cleaned = cloudPiList
+          .filter((item) => !isCancelledOrder(item) && !isCancelledPi(item.piNumber))
+          .map((item) => ({
+            ...item,
+            invoiceNumber: item.invoiceNumber || '',
+            contactPerson: item.contactPerson || 'System',
+            tcStatus: computeAutomatedTcStatus(item),
+          }));
         setPiList(cleaned);
         const currentSaved = loadFromPersistentStorage();
         saveToPersistentStorage(cleaned, currentSaved.fileInfo);
@@ -127,12 +143,14 @@ export default function App() {
       const saved = loadFromPersistentStorage();
       if (saved.data) {
         setPiList(
-          saved.data.map((item) => ({
-            ...item,
-            invoiceNumber: item.invoiceNumber || '',
-            contactPerson: item.contactPerson || 'System',
-            tcStatus: computeAutomatedTcStatus(item),
-          }))
+          saved.data
+            .filter((item) => !isCancelledOrder(item) && !isCancelledPi(item.piNumber))
+            .map((item) => ({
+              ...item,
+              invoiceNumber: item.invoiceNumber || '',
+              contactPerson: item.contactPerson || 'System',
+              tcStatus: computeAutomatedTcStatus(item),
+            }))
         );
         setActiveFileInfo(saved.fileInfo);
       }
@@ -244,6 +262,8 @@ export default function App() {
     return piList.filter((item) => {
       // Exclude Cancelled orders from TC List
       if (
+        isCancelledOrder(item) ||
+        isCancelledPi(item.piNumber) ||
         isCancelledStatus(item.orderStatus) ||
         isCancelledStatus(item.deliveryStatus) ||
         isCancelledStatus(item.tcStatus)

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { PIData, TCStatus, computeAutomatedTcStatus, calculatePiAgeDays, isCancelledStatus } from '../types/tc';
+import { PIData, TCStatus, computeAutomatedTcStatus, calculatePiAgeDays, isCancelledStatus, isCancelledOrder, isCancelledPi } from '../types/tc';
 import { BatchUpdateModal } from './BatchUpdateModal';
 import {
   ArrowUpDown,
@@ -155,6 +155,8 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
   const filteredData = useMemo(() => {
     let list = data.filter(
       (item) =>
+        !isCancelledOrder(item) &&
+        !isCancelledPi(item.piNumber) &&
         !isCancelledStatus(item.orderStatus) &&
         !isCancelledStatus(item.deliveryStatus) &&
         !isCancelledStatus(item.tcStatus)
