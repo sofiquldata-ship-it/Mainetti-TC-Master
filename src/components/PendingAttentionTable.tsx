@@ -336,9 +336,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
       )}
 
       {/* Table Sub-Header Controls */}
-      <div className="px-2 py-1 border-b border-slate-200 bg-slate-50/70 flex items-center justify-between gap-1.5 overflow-x-auto scrollbar-none">
+      <div className="px-2.5 py-1.5 border-b border-slate-200 bg-slate-50/70 flex flex-wrap items-center justify-between gap-2">
         {/* Left: View Tabs */}
-        <div className="flex items-center gap-1 bg-slate-200/70 p-0.5 rounded-sm shrink-0">
+        <div className="flex flex-wrap items-center gap-1 bg-slate-200/70 p-0.5 rounded-sm">
           <button
             type="button"
             onClick={() => setViewMode('all')}
@@ -387,8 +387,8 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
           </button>
         </div>
 
-        {/* Right Controls: Scroll Bar Helpers + Search + Export */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        {/* Right Controls: Scroll Bar Helpers + Search + Export (Always visible) */}
+        <div className="flex flex-wrap items-center gap-1.5 grow sm:grow-0 justify-end ml-auto">
           {/* Scroll Navigation Toolbar */}
           <div className="flex items-center gap-0.5 bg-white border border-slate-300 rounded-sm p-0.5 shadow-2xs">
             <button

@@ -82,18 +82,18 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Right: Operational Date Stamp & Quick Stats */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-sm">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0 ml-auto">
+            <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-500 bg-slate-50 border border-slate-200 px-2 py-1 rounded-sm">
               <Calendar className="w-3.5 h-3.5 text-slate-400" />
               <span className="font-mono text-[11px] text-slate-700">
-                FY 2026 · Cycle Q3
+                FY 2026 · Q3
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 border border-slate-200 text-[11px] font-mono text-slate-700 rounded-sm">
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 border border-slate-200 text-[11px] font-mono text-slate-700 rounded-sm shrink-0">
               <span className="w-2 h-2 rounded-full bg-emerald-600" />
               <span>
-                <strong>{filteredCount}</strong>/{totalCount} Records
+                <strong>{filteredCount}</strong>/{totalCount} <span className="hidden sm:inline">Records</span>
               </span>
             </div>
 

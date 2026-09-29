@@ -40,10 +40,10 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   ];
 
   return (
-    <div className="bg-white border border-slate-200 rounded-sm shadow-xs px-2 py-1 mb-1.5 sticky top-[40px] z-20">
-      <div className="flex items-center justify-between gap-1.5 overflow-x-auto scrollbar-none py-0">
+    <div className="bg-white border border-slate-200 rounded-sm shadow-xs px-2.5 py-1.5 mb-1.5 sticky top-[40px] z-20">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         {/* Left: Filter Controls */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5">
           <div className="flex items-center gap-1 text-[11px] font-bold text-[#0b1b3d] uppercase tracking-wider pr-2 border-r border-slate-200 shrink-0">
             <Filter className="w-3.5 h-3.5 text-[#1e3a8a]" />
             <span>Filters</span>
@@ -157,19 +157,19 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           )}
         </div>
 
-        {/* Right: Quick Search + Counter */}
-        <div className="flex items-center gap-2 shrink-0 ml-auto">
-          <div className="relative w-44 sm:w-52">
+        {/* Right: Quick Search + Counter (Never hidden on zoom) */}
+        <div className="flex items-center gap-2 grow sm:grow-0 ml-auto justify-end shrink-0">
+          <div className="relative w-full min-w-[180px] sm:w-56">
             <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               placeholder="Search PI, Inv #, TC #, Buyer..."
               value={filters.searchQuery}
               onChange={(e) => onFilterChange({ searchQuery: e.target.value })}
-              className="w-full pl-7 pr-2 py-0.5 text-xs bg-slate-50 border border-slate-300 rounded-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:border-[#1e3a8a] focus:bg-white"
+              className="w-full pl-7 pr-2 py-1 text-xs bg-slate-50 border border-slate-300 rounded-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:border-[#1e3a8a] focus:bg-white"
             />
           </div>
-          <span className="text-[11px] font-mono text-slate-500 shrink-0 whitespace-nowrap">
+          <span className="text-[11px] font-mono text-slate-600 shrink-0 whitespace-nowrap bg-slate-100 px-2 py-0.5 rounded-sm border border-slate-200">
             <strong className="text-slate-900">{totalResults}</strong> found
           </span>
         </div>
