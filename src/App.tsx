@@ -11,6 +11,8 @@ import { PendingAttentionTable } from './components/PendingAttentionTable';
 import { PiDetailDrawer } from './components/PiDetailDrawer';
 import { TcSummaryPageView } from './components/TcSummaryPageView';
 import { DocumentsView } from './components/DocumentsView';
+import { CommercialFollowUpView } from './components/CommercialFollowUpView';
+import { TcLeadTimeView } from './components/TcLeadTimeView';
 import { ExcelUploadView } from './components/ExcelUploadView';
 import { GoogleSheetsSyncModal } from './components/GoogleSheetsSyncModal';
 import {
@@ -678,6 +680,35 @@ export default function App() {
                 isFullPage={true}
               />
             </div>
+          ) : activeTab === 'Commercial Follow-up' ? (
+            /* Dedicated Commercial Follow-up Page */
+            <CommercialFollowUpView
+              data={filteredData}
+              filters={filters}
+              onFilterChange={handleFilterChange}
+              onResetFilters={handleResetFilters}
+              availableCustomers={availableCustomers}
+              availableBuyers={availableBuyers}
+              onSelectPI={(pi) => setSelectedPi(pi)}
+              selectedPiId={selectedPi?.id}
+              onExportCSV={handleExportCSV}
+              onSaveToGoogleSheets={() => setIsGoogleSheetsModalOpen(true)}
+              onBatchUpdatePIs={handleBatchUpdatePIs}
+              onUpdatePI={handleUpdatePI}
+            />
+          ) : activeTab === 'TC Lead Time' ? (
+            /* Dedicated TC Lead Time Analysis Page */
+            <TcLeadTimeView
+              data={filteredData}
+              filters={filters}
+              onFilterChange={handleFilterChange}
+              onResetFilters={handleResetFilters}
+              availableCustomers={availableCustomers}
+              availableBuyers={availableBuyers}
+              onSelectPI={(pi) => setSelectedPi(pi)}
+              selectedPiId={selectedPi?.id}
+              onSaveToGoogleSheets={() => setIsGoogleSheetsModalOpen(true)}
+            />
           ) : piList.length === 0 ? (
             /* Empty State when no data has been uploaded yet */
             <div className="bg-white border border-slate-200 rounded-sm p-12 text-center shadow-xs my-8 max-w-2xl mx-auto space-y-4">

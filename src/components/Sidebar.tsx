@@ -5,6 +5,8 @@ import {
   UploadCloud,
   BarChart3,
   Table,
+  FolderClock,
+  Timer,
   Download,
   RefreshCw,
   PanelLeftClose,
@@ -56,6 +58,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Table,
       badge: `${totalCount}`,
       badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/30 font-semibold',
+    },
+    {
+      id: 'Commercial Follow-up',
+      label: 'Commercial Follow-up',
+      icon: FolderClock,
+      badge: null,
+    },
+    {
+      id: 'TC Lead Time',
+      label: 'TC Lead Time',
+      icon: Timer,
+      badge: null,
     },
     {
       id: 'Executive Summary',
