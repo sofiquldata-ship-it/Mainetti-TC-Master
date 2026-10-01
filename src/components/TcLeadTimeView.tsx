@@ -18,7 +18,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsRight,
-  Zap,
+  Siren,
+  Flame,
 } from 'lucide-react';
 
 interface TcLeadTimeViewProps {
@@ -45,7 +46,10 @@ type SortField =
   | 'stage4Days'
   | 'stage5Days'
   | 'totalLeadDays'
+  | 'signalLevel'
   | 'tcStatus';
+
+type SignalLevel = 'critical' | 'warning' | 'normal' | 'none';
 
 /**
  * Calculates days between two date strings (YYYY-MM-DD)
@@ -84,7 +88,10 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
   selectedPiId,
   onSaveToGoogleSheets,
 }) => {
-  const [leadTimeFilter, setLeadTimeFilter] = useState<'all' | 'completed' | 'in_progress' | 'over_20d'>('all');
+  const [leadTimeFilter, setLeadTimeFilter] = useState<
+    'all' | 'critical_signals' | 'warning_signals' | 'on_track' | 'completed' | 'in_progress'
+  >('all');
+  const [slaTargetDays, setSlaTargetDays] = useState<number>(20);
   const [sortField, setSortField] = useState<SortField>('totalLeadDays');
   const [sortAsc, setSortAsc] = useState<boolean>(false);
   const [tableSearch, setTableSearch] = useState<string>('');
@@ -106,7 +113,7 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
     }
   };
 
-  // Pre-calculate lead times for all items
+  // Pre-calculate lead times, bottlenecks & alarm signals for all items
   const enhancedList = useMemo(() => {
     return data.map((item) => {
       const hasReq = !!(item.tcRequestDate && item.tcRequestDate.trim());
@@ -116,15 +123,15 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
       const hasFinalApply = !!(item.finalTcApplyDate && item.finalTcApplyDate.trim());
       const hasFinalRec = !!(item.finalTcReceivedDate && item.finalTcReceivedDate.trim());
 
-      // Stage 1: Request -> Comm Doc Received
+      // Stage 1: Request -> Comm Doc Received (Target <= 4d)
       const stage1 = hasReq && hasCommDoc ? getDaysBetween(item.tcRequestDate, item.receivedCommercialDocDate) : null;
-      // Stage 2: Comm Doc -> Draft TC Received
+      // Stage 2: Comm Doc -> Draft TC Received (Target <= 5d)
       const stage2 = hasCommDoc && hasDraftTc ? getDaysBetween(item.receivedCommercialDocDate, item.draftTcDate) : null;
-      // Stage 3: Draft TC -> Draft Confirmed
+      // Stage 3: Draft TC -> Draft Confirmed (Target <= 3d)
       const stage3 = hasDraftTc && hasDraftConf ? getDaysBetween(item.draftTcDate, item.draftConfirmationDate) : null;
-      // Stage 4: Draft Confirmed -> Final TC Applied
+      // Stage 4: Draft Confirmed -> Final TC Applied (Target <= 3d)
       const stage4 = hasDraftConf && hasFinalApply ? getDaysBetween(item.draftConfirmationDate, item.finalTcApplyDate) : null;
-      // Stage 5: Final TC Applied -> Final TC Received
+      // Stage 5: Final TC Applied -> Final TC Received (Target <= 5d)
       const stage5 = hasFinalApply && hasFinalRec ? getDaysBetween(item.finalTcApplyDate, item.finalTcReceivedDate) : null;
 
       // Total Lead Time: from TC Request to Final TC Received (or to today if in progress)
@@ -139,6 +146,40 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
         isCompleted = false;
       }
 
+      // Determine Signal Level (Overdue Alert, Warning, On-track)
+      let signalLevel: SignalLevel = 'none';
+      if (hasReq && totalLeadDays !== null) {
+        if (totalLeadDays > slaTargetDays) {
+          signalLevel = 'critical'; // Exceeded SLA
+        } else if (totalLeadDays > 14) {
+          signalLevel = 'warning'; // Near deadline
+        } else {
+          signalLevel = 'normal'; // Fast & On-track
+        }
+      }
+
+      // Identify the biggest delay bottleneck stage
+      const stageChecks = [
+        { name: 'S1:Doc', days: stage1, target: 4 },
+        { name: 'S2:Draft', days: stage2, target: 5 },
+        { name: 'S3:Conf', days: stage3, target: 3 },
+        { name: 'S4:Apply', days: stage4, target: 3 },
+        { name: 'S5:TC', days: stage5, target: 5 },
+      ];
+
+      let worstBottleneck: string | null = null;
+      let maxExcess = 0;
+
+      stageChecks.forEach((s) => {
+        if (s.days !== null && s.days > s.target) {
+          const excess = s.days - s.target;
+          if (excess > maxExcess) {
+            maxExcess = excess;
+            worstBottleneck = `${s.name} (+${excess}d)`;
+          }
+        }
+      });
+
       return {
         ...item,
         stage1Days: stage1,
@@ -149,15 +190,20 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
         totalLeadDays,
         isCompleted,
         hasReq,
+        signalLevel,
+        worstBottleneck,
       };
     });
-  }, [data]);
+  }, [data, slaTargetDays]);
 
-  // Summary Metrics
+  // Summary Metrics & Live Signals
   const metrics = useMemo(() => {
     let completedCount = 0;
     let inProgressCount = 0;
     let completedDaysSum = 0;
+    let criticalCount = 0;
+    let warningCount = 0;
+    let onTrackCount = 0;
     let s1Sum = 0, s1Count = 0;
     let s2Sum = 0, s2Count = 0;
     let s3Sum = 0, s3Count = 0;
@@ -171,6 +217,10 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
       } else if (item.hasReq) {
         inProgressCount++;
       }
+
+      if (item.signalLevel === 'critical') criticalCount++;
+      if (item.signalLevel === 'warning') warningCount++;
+      if (item.signalLevel === 'normal') onTrackCount++;
 
       if (item.stage1Days !== null) { s1Sum += item.stage1Days; s1Count++; }
       if (item.stage2Days !== null) { s2Sum += item.stage2Days; s2Count++; }
@@ -189,6 +239,9 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
     return {
       completedCount,
       inProgressCount,
+      criticalCount,
+      warningCount,
+      onTrackCount,
       avgTotal,
       avgS1,
       avgS2,
@@ -203,13 +256,17 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
   const filteredAndSortedList = useMemo(() => {
     let list = [...enhancedList];
 
-    // Filter by lead time state
-    if (leadTimeFilter === 'completed') {
+    // Filter by lead time signal / state
+    if (leadTimeFilter === 'critical_signals') {
+      list = list.filter((i) => i.signalLevel === 'critical');
+    } else if (leadTimeFilter === 'warning_signals') {
+      list = list.filter((i) => i.signalLevel === 'warning');
+    } else if (leadTimeFilter === 'on_track') {
+      list = list.filter((i) => i.signalLevel === 'normal');
+    } else if (leadTimeFilter === 'completed') {
       list = list.filter((i) => i.isCompleted);
     } else if (leadTimeFilter === 'in_progress') {
       list = list.filter((i) => i.hasReq && !i.isCompleted);
-    } else if (leadTimeFilter === 'over_20d') {
-      list = list.filter((i) => i.totalLeadDays !== null && i.totalLeadDays >= 20);
     }
 
     // Search filter
@@ -228,6 +285,12 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
     list.sort((a, b) => {
       let valA: any = a[sortField as keyof typeof a] ?? -999;
       let valB: any = b[sortField as keyof typeof b] ?? -999;
+
+      if (sortField === 'signalLevel') {
+        const order = { critical: 3, warning: 2, normal: 1, none: 0 };
+        valA = order[a.signalLevel] ?? 0;
+        valB = order[b.signalLevel] ?? 0;
+      }
 
       if (valA === null) valA = -999;
       if (valB === null) valB = -999;
@@ -270,13 +333,15 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
       'Buyer',
       'Customer',
       'TC Request Date',
-      'Stage 1 (Req to Comm Doc Days)',
-      'Stage 2 (Doc to Draft TC Days)',
-      'Stage 3 (Draft to Confirm Days)',
-      'Stage 4 (Confirm to Apply Days)',
-      'Stage 5 (Apply to Final TC Days)',
+      'S1 (Req to Doc Days)',
+      'S2 (Doc to Draft Days)',
+      'S3 (Draft to Confirm Days)',
+      'S4 (Confirm to Apply Days)',
+      'S5 (Apply to Final TC Days)',
       'Total Lead Time (Days)',
-      'Status',
+      'Lead Time Signal',
+      'Bottleneck Stage',
+      'TC Status',
       'TC Number',
     ];
 
@@ -291,6 +356,8 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
       d.stage4Days !== null ? d.stage4Days : '-',
       d.stage5Days !== null ? d.stage5Days : '-',
       d.totalLeadDays !== null ? d.totalLeadDays : '-',
+      `"${d.signalLevel === 'critical' ? 'CRITICAL OVERDUE' : d.signalLevel === 'warning' ? 'WARNING' : 'ON TRACK'}"`,
+      `"${d.worstBottleneck || 'None'}"`,
       `"${d.isCompleted ? 'Completed' : d.hasReq ? 'In Progress' : 'Not Requested'}"`,
       `"${d.tcNumber || ''}"`,
     ]);
@@ -304,34 +371,37 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
     link.setAttribute('href', encodedUri);
     link.setAttribute(
       'download',
-      `Mainetti_TC_Lead_Time_${new Date().toISOString().slice(0, 10)}.csv`
+      `Mainetti_TC_Lead_Time_Signals_${new Date().toISOString().slice(0, 10)}.csv`
     );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const renderDaysCell = (days: number | null) => {
+  // Render individual stage cell with strict uniform single-line height
+  const renderStageCell = (days: number | null, maxTargetDays: number = 4) => {
     if (days === null) return <span className="text-slate-300 font-mono text-xs">-</span>;
+    const isOver = days > maxTargetDays;
+
     return (
       <span
-        className={`inline-block px-1.5 py-0.2 rounded-xs font-mono font-bold text-xs ${
-          days <= 3
-            ? 'text-emerald-700 bg-emerald-50'
-            : days <= 7
-            ? 'text-blue-800 bg-blue-50'
-            : days <= 12
-            ? 'text-amber-800 bg-amber-50'
-            : 'text-red-700 bg-red-50'
+        className={`inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-xs font-mono font-bold text-[11px] leading-tight ${
+          isOver
+            ? 'bg-red-100 text-red-900 border border-red-300 shadow-2xs font-extrabold'
+            : days <= 2
+            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+            : 'bg-blue-50 text-blue-800 border border-blue-200'
         }`}
+        title={isOver ? `Delayed: exceeded target (${maxTargetDays}d)` : 'On track'}
       >
-        {days}d
+        {isOver && <AlertTriangle className="w-2.5 h-2.5 text-red-600 shrink-0" />}
+        <span>{days}d</span>
       </span>
     );
   };
 
   return (
-    <div className="space-y-1.5 flex flex-col">
+    <div className="space-y-1 flex flex-col">
       {/* 1. FilterBar */}
       <FilterBar
         filters={filters}
@@ -342,142 +412,147 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
         buyers={availableBuyers}
       />
 
-      {/* 2. Concise Top Summary: Lead Time Cards & Stage Averages */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-2">
-        {/* Card 1: Total Avg Lead Time */}
-        <div className="bg-white border border-slate-200 rounded-sm p-2.5 shadow-2xs flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">
-              Avg Total Lead Time
-            </span>
-            <div className="flex items-baseline gap-1.5 mt-0.5">
-              <span className="text-2xl font-black text-[#0b1b3d] font-mono">{metrics.avgTotal}</span>
-              <span className="text-xs font-bold text-slate-500">Days / TC</span>
-            </div>
+      {/* 2. ULTRA-COMPACT SLIM TOP SUMMARY STRIP (Smaller cards to make Table Much Bigger) */}
+      <div className="bg-white border border-slate-200 rounded-sm px-2 py-1 shadow-2xs flex flex-wrap items-center justify-between gap-2">
+        {/* Left Side: Key KPIs in compact inline pills */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* KPI 1: Avg Total Lead Time */}
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-sm">
+            <Timer className="w-3.5 h-3.5 text-blue-900" />
+            <span className="text-[10px] text-slate-500 font-semibold uppercase">Avg Lead Time:</span>
+            <span className="font-mono font-black text-xs text-[#0b1b3d]">{metrics.avgTotal}d</span>
+            <span className="text-[10px] text-slate-400 font-mono">(SLA ≤{slaTargetDays}d)</span>
           </div>
-          <div className="w-9 h-9 bg-blue-50 text-blue-900 rounded-sm flex items-center justify-center border border-blue-200">
-            <Timer className="w-5 h-5" />
+
+          {/* KPI 2: Critical Overdue Signal Alert (Clickable) */}
+          <button
+            type="button"
+            onClick={() => setLeadTimeFilter(leadTimeFilter === 'critical_signals' ? 'all' : 'critical_signals')}
+            className={`flex items-center gap-1.5 px-2 py-0.5 rounded-sm text-xs font-bold transition-all cursor-pointer border ${
+              metrics.criticalCount > 0
+                ? leadTimeFilter === 'critical_signals'
+                  ? 'bg-red-800 text-white border-red-950 shadow-xs'
+                  : 'bg-red-50 text-red-800 hover:bg-red-100 border-red-300'
+                : 'bg-slate-50 text-slate-500 border-slate-200'
+            }`}
+            title="Filter by Overdue Signals"
+          >
+            <Siren className={`w-3.5 h-3.5 ${metrics.criticalCount > 0 ? 'text-red-600 animate-pulse' : 'text-slate-400'}`} />
+            <span>Overdue Signals:</span>
+            <span className={`font-mono px-1 rounded-xs ${metrics.criticalCount > 0 ? 'bg-red-600 text-white font-black' : 'bg-slate-200 text-slate-700'}`}>
+              {metrics.criticalCount}
+            </span>
+          </button>
+
+          {/* KPI 3: In-Progress / Warning */}
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-sm text-xs">
+            <Clock className="w-3.5 h-3.5 text-amber-600" />
+            <span className="text-[10px] text-slate-500 font-semibold uppercase">Active / Warning:</span>
+            <span className="font-mono font-bold text-amber-700">{metrics.inProgressCount}</span>
+            <span className="text-[10px] text-slate-400">({metrics.warningCount} Warning)</span>
+          </div>
+
+          {/* KPI 4: Completed */}
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-sm text-xs">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            <span className="text-[10px] text-slate-500 font-semibold uppercase">Done:</span>
+            <span className="font-mono font-bold text-emerald-700">{metrics.completedCount}</span>
+            <span className="text-[10px] text-slate-400">/ {metrics.totalTracked}</span>
           </div>
         </div>
 
-        {/* Card 2: Completed TCs */}
-        <div className="bg-white border border-slate-200 rounded-sm p-2.5 shadow-2xs flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">
-              Final TC Received
-            </span>
-            <div className="flex items-baseline gap-1.5 mt-0.5">
-              <span className="text-2xl font-black text-emerald-700 font-mono">{metrics.completedCount}</span>
-              <span className="text-xs font-medium text-slate-500">of {metrics.totalTracked} Requested</span>
-            </div>
+        {/* Right Side: Stage Averages Micro-Strip & SLA Target */}
+        <div className="flex items-center gap-2">
+          {/* Stage Averages Micro-Strip */}
+          <div className="hidden lg:flex items-center gap-1 bg-[#0b1b3d] text-white px-2 py-0.5 rounded-sm font-mono text-[10px] border border-[#1a386b]">
+            <span className="text-blue-200 uppercase text-[9px] mr-1">Stage Avgs:</span>
+            <span title="Stage 1: TC Req to Doc" className="bg-white/10 px-1 rounded-xs">S1:<strong>{metrics.avgS1}d</strong></span>
+            <span title="Stage 2: Doc to Draft" className="bg-white/10 px-1 rounded-xs">S2:<strong>{metrics.avgS2}d</strong></span>
+            <span title="Stage 3: Draft to Confirm" className="bg-white/10 px-1 rounded-xs">S3:<strong>{metrics.avgS3}d</strong></span>
+            <span title="Stage 4: Confirm to Apply" className="bg-white/10 px-1 rounded-xs">S4:<strong>{metrics.avgS4}d</strong></span>
+            <span title="Stage 5: Apply to Final TC" className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1 rounded-xs">S5:<strong>{metrics.avgS5}d</strong></span>
           </div>
-          <div className="w-9 h-9 bg-emerald-50 text-emerald-700 rounded-sm flex items-center justify-center border border-emerald-200">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-        </div>
 
-        {/* Card 3: In-Progress TCs */}
-        <div className="bg-white border border-slate-200 rounded-sm p-2.5 shadow-2xs flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">
-              Active In Progress
-            </span>
-            <div className="flex items-baseline gap-1.5 mt-0.5">
-              <span className="text-2xl font-black text-amber-700 font-mono">{metrics.inProgressCount}</span>
-              <span className="text-xs font-medium text-slate-500">Under Pipeline</span>
-            </div>
-          </div>
-          <div className="w-9 h-9 bg-amber-50 text-amber-700 rounded-sm flex items-center justify-center border border-amber-200">
-            <Clock className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Card 4: Stage Breakdown Strip */}
-        <div className="bg-[#0b1b3d] text-white border border-[#1a386b] rounded-sm p-2 shadow-2xs flex flex-col justify-center">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-blue-200 font-mono mb-1">
-            Stage Lead Time Averages
-          </div>
-          <div className="grid grid-cols-5 gap-1 text-center font-mono text-[10px]">
-            <div className="bg-white/10 p-0.5 rounded-xs" title="Stage 1: TC Req to Commercial Doc">
-              <span className="block text-[8px] text-blue-200">S1:Doc</span>
-              <strong className="text-white">{metrics.avgS1}d</strong>
-            </div>
-            <div className="bg-white/10 p-0.5 rounded-xs" title="Stage 2: Comm Doc to Draft TC">
-              <span className="block text-[8px] text-blue-200">S2:Drft</span>
-              <strong className="text-white">{metrics.avgS2}d</strong>
-            </div>
-            <div className="bg-white/10 p-0.5 rounded-xs" title="Stage 3: Draft to Confirmation">
-              <span className="block text-[8px] text-blue-200">S3:Conf</span>
-              <strong className="text-white">{metrics.avgS3}d</strong>
-            </div>
-            <div className="bg-white/10 p-0.5 rounded-xs" title="Stage 4: Confirmation to Final Apply">
-              <span className="block text-[8px] text-blue-200">S4:App</span>
-              <strong className="text-white">{metrics.avgS4}d</strong>
-            </div>
-            <div className="bg-emerald-500/20 border border-emerald-400/30 p-0.5 rounded-xs" title="Stage 5: Apply to Final TC">
-              <span className="block text-[8px] text-emerald-300">S5:TC</span>
-              <strong className="text-emerald-300">{metrics.avgS5}d</strong>
-            </div>
+          {/* SLA Selector */}
+          <div className="flex items-center gap-1 bg-slate-100 border border-slate-300 rounded-sm px-1.5 py-0.5 text-xs text-slate-700">
+            <span className="text-[9px] font-mono text-slate-400 uppercase">SLA:</span>
+            <select
+              value={slaTargetDays}
+              onChange={(e) => setSlaTargetDays(Number(e.target.value))}
+              className="bg-transparent font-bold text-xs font-mono focus:outline-hidden cursor-pointer text-[#0b1b3d]"
+              title="Change SLA Lead Time Threshold"
+            >
+              <option value={15}>15d SLA</option>
+              <option value={20}>20d SLA (Std)</option>
+              <option value={25}>25d SLA</option>
+              <option value={30}>30d SLA</option>
+            </select>
           </div>
         </div>
       </div>
 
       {/* 3. Main Grid Container */}
       <div className="bg-white border border-slate-200 rounded-sm shadow-xs overflow-hidden">
-        {/* Table Sub-Header Controls */}
-        <div className="px-2.5 py-1.5 border-b border-slate-200 bg-slate-50/70 flex flex-wrap items-center justify-between gap-2">
-          {/* Quick Filters */}
-          <div className="flex flex-wrap items-center gap-1 bg-slate-200/70 p-0.5 rounded-sm">
+        {/* Table Sub-Header Controls & Signal Toggles */}
+        <div className="px-2 py-1 border-b border-slate-200 bg-slate-50/80 flex flex-wrap items-center justify-between gap-1.5">
+          {/* Quick Signal Filter Buttons */}
+          <div className="flex flex-wrap items-center gap-1">
             <button
               type="button"
               onClick={() => setLeadTimeFilter('all')}
-              className={`px-2 py-0.5 text-xs font-semibold rounded-xs transition-colors cursor-pointer ${
+              className={`px-2 py-0.5 text-xs font-semibold rounded-xs transition-colors cursor-pointer border ${
                 leadTimeFilter === 'all'
-                  ? 'bg-white text-[#0b1b3d] shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-[#0b1b3d] text-white border-blue-950 shadow-xs'
+                  : 'bg-white text-slate-700 hover:bg-slate-100 border-slate-300'
               }`}
             >
-              All PIs ({enhancedList.length})
+              All Tracked ({enhancedList.length})
             </button>
+
+            {/* Critical Overdue Signal Filter */}
             <button
               type="button"
-              onClick={() => setLeadTimeFilter('completed')}
-              className={`px-2 py-0.5 text-xs font-semibold rounded-xs transition-colors cursor-pointer flex items-center gap-1 ${
-                leadTimeFilter === 'completed'
-                  ? 'bg-white text-emerald-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+              onClick={() => setLeadTimeFilter('critical_signals')}
+              className={`px-2 py-0.5 text-xs font-semibold rounded-xs transition-colors cursor-pointer border flex items-center gap-1 ${
+                leadTimeFilter === 'critical_signals'
+                  ? 'bg-red-800 text-white border-red-950 shadow-xs'
+                  : 'bg-red-50 text-red-800 hover:bg-red-100 border-red-300'
               }`}
             >
-              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-              <span>Final TC Done ({metrics.completedCount})</span>
+              <Siren className="w-3 h-3 text-red-600" />
+              <span>Overdue Signals ({metrics.criticalCount})</span>
             </button>
+
+            {/* Warning Signals Filter */}
             <button
               type="button"
-              onClick={() => setLeadTimeFilter('in_progress')}
-              className={`px-2 py-0.5 text-xs font-semibold rounded-xs transition-colors cursor-pointer flex items-center gap-1 ${
-                leadTimeFilter === 'in_progress'
-                  ? 'bg-white text-amber-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+              onClick={() => setLeadTimeFilter('warning_signals')}
+              className={`px-2 py-0.5 text-xs font-semibold rounded-xs transition-colors cursor-pointer border flex items-center gap-1 ${
+                leadTimeFilter === 'warning_signals'
+                  ? 'bg-amber-800 text-white border-amber-950 shadow-xs'
+                  : 'bg-amber-50 text-amber-900 hover:bg-amber-100 border-amber-300'
               }`}
             >
               <Clock className="w-3 h-3 text-amber-600" />
-              <span>In Progress ({metrics.inProgressCount})</span>
+              <span>Warning ({metrics.warningCount})</span>
             </button>
+
+            {/* On-Track Filter */}
             <button
               type="button"
-              onClick={() => setLeadTimeFilter('over_20d')}
-              className={`px-2 py-0.5 text-xs font-semibold rounded-xs transition-colors cursor-pointer flex items-center gap-1 ${
-                leadTimeFilter === 'over_20d'
-                  ? 'bg-white text-red-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+              onClick={() => setLeadTimeFilter('on_track')}
+              className={`px-2 py-0.5 text-xs font-semibold rounded-xs transition-colors cursor-pointer border flex items-center gap-1 ${
+                leadTimeFilter === 'on_track'
+                  ? 'bg-emerald-800 text-white border-emerald-950 shadow-xs'
+                  : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100 border-emerald-300'
               }`}
             >
-              <AlertTriangle className="w-3 h-3 text-red-600" />
-              <span>20+ Days</span>
+              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+              <span>On-Track ({metrics.onTrackCount})</span>
             </button>
           </div>
 
-          {/* Right Toolbar */}
+          {/* Right Toolbar: Search, Export, Scroll Navigation */}
           <div className="flex flex-wrap items-center gap-1.5 ml-auto">
             {/* Scroll Navigation */}
             <div className="flex items-center gap-0.5 bg-white border border-slate-300 rounded-sm p-0.5 shadow-2xs">
@@ -552,7 +627,7 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
               type="button"
               onClick={handleExportCSV}
               className="flex items-center gap-1 px-2 py-0.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-sm transition-colors cursor-pointer shadow-2xs"
-              title="Export Lead Time Data to CSV"
+              title="Export Lead Time Data with Signals to CSV"
             >
               <Download className="w-3 h-3 text-slate-500" />
               <span>CSV</span>
@@ -560,18 +635,18 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
           </div>
         </div>
 
-        {/* 4. Table with Sticky Navy Header */}
+        {/* 4. EXPANDED TABLE WITH EXACT UNIFORM ROW HEIGHT (h-8 across all rows) */}
         <div
           ref={tableContainerRef}
-          className="overflow-x-auto overflow-y-auto table-scrollbar relative border-b border-slate-200 h-[calc(100vh-270px)] max-h-[calc(100vh-270px)] min-h-[400px]"
+          className="overflow-x-auto overflow-y-auto table-scrollbar relative border-b border-slate-200 h-[calc(100vh-190px)] max-h-[calc(100vh-190px)] min-h-[460px]"
         >
-          <table className="w-full text-left border-collapse min-w-[1360px]">
+          <table className="w-full text-left border-collapse min-w-[1440px]">
             <thead className="sticky top-0 z-30 shadow-[0_2px_4px_rgba(0,0,0,0.15)]">
-              <tr className="bg-[#0b1b3d] text-white text-[10px] font-bold uppercase tracking-wider select-none">
+              <tr className="bg-[#0b1b3d] text-white text-[10px] font-bold uppercase tracking-wider select-none h-8">
                 {/* 1. ORDER DATE */}
                 <th
                   onClick={() => handleSort('orderDate')}
-                  className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 left-0 z-40 bg-[#0b1b3d] shadow-[2px_2px_4px_-1px_rgba(0,0,0,0.25)]"
+                  className="py-1 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 left-0 z-40 bg-[#0b1b3d] shadow-[2px_2px_4px_-1px_rgba(0,0,0,0.25)] h-8"
                 >
                   <div className="flex items-center gap-1">
                     <span>Order Date</span>
@@ -582,7 +657,7 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
                 {/* 2. PI NO */}
                 <th
                   onClick={() => handleSort('piNumber')}
-                  className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 left-[90px] z-40 bg-[#0b1b3d] shadow-[4px_2px_6px_-2px_rgba(0,0,0,0.25)]"
+                  className="py-1 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 left-[90px] z-40 bg-[#0b1b3d] shadow-[4px_2px_6px_-2px_rgba(0,0,0,0.25)] h-8"
                 >
                   <div className="flex items-center gap-1">
                     <span>PI No</span>
@@ -593,7 +668,7 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
                 {/* 3. BUYER */}
                 <th
                   onClick={() => handleSort('buyer')}
-                  className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+                  className="py-1 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d] h-8"
                 >
                   <div className="flex items-center gap-1">
                     <span>Buyer</span>
@@ -604,7 +679,7 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
                 {/* 4. CUSTOMER */}
                 <th
                   onClick={() => handleSort('customer')}
-                  className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+                  className="py-1 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d] h-8"
                 >
                   <div className="flex items-center gap-1">
                     <span>Customer</span>
@@ -615,7 +690,7 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
                 {/* 5. TC REQUEST DATE */}
                 <th
                   onClick={() => handleSort('tcRequestDate')}
-                  className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+                  className="py-1 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d] h-8"
                 >
                   <div className="flex items-center gap-1">
                     <span>TC Req Date</span>
@@ -626,8 +701,8 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
                 {/* 6. STAGE 1: Req -> Comm Doc */}
                 <th
                   onClick={() => handleSort('stage1Days')}
-                  className="py-1.5 px-2 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-center sticky top-0 z-30 bg-[#0b1b3d]"
-                  title="Stage 1: TC Request to Commercial Document Received"
+                  className="py-1 px-2 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-center sticky top-0 z-30 bg-[#0b1b3d] h-8"
+                  title="Stage 1: TC Request to Commercial Document (Target: ≤4d)"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>S1: Comm Doc</span>
@@ -638,8 +713,8 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
                 {/* 7. STAGE 2: Comm Doc -> Draft TC */}
                 <th
                   onClick={() => handleSort('stage2Days')}
-                  className="py-1.5 px-2 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-center sticky top-0 z-30 bg-[#0b1b3d]"
-                  title="Stage 2: Commercial Doc to Draft TC Received"
+                  className="py-1 px-2 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-center sticky top-0 z-30 bg-[#0b1b3d] h-8"
+                  title="Stage 2: Commercial Doc to Draft TC (Target: ≤5d)"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>S2: Draft TC</span>
@@ -650,8 +725,8 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
                 {/* 8. STAGE 3: Draft TC -> Draft Confirmed */}
                 <th
                   onClick={() => handleSort('stage3Days')}
-                  className="py-1.5 px-2 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-center sticky top-0 z-30 bg-[#0b1b3d]"
-                  title="Stage 3: Draft TC to Draft Confirmed"
+                  className="py-1 px-2 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-center sticky top-0 z-30 bg-[#0b1b3d] h-8"
+                  title="Stage 3: Draft TC to Draft Confirmed (Target: ≤3d)"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>S3: Confirm</span>
@@ -662,8 +737,8 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
                 {/* 9. STAGE 4: Confirmed -> Final Apply */}
                 <th
                   onClick={() => handleSort('stage4Days')}
-                  className="py-1.5 px-2 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-center sticky top-0 z-30 bg-[#0b1b3d]"
-                  title="Stage 4: Draft Confirmed to Final TC Applied"
+                  className="py-1 px-2 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-center sticky top-0 z-30 bg-[#0b1b3d] h-8"
+                  title="Stage 4: Draft Confirmed to Final TC Applied (Target: ≤3d)"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>S4: Final Apply</span>
@@ -674,8 +749,8 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
                 {/* 10. STAGE 5: Final Apply -> Final TC Received */}
                 <th
                   onClick={() => handleSort('stage5Days')}
-                  className="py-1.5 px-2 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-center sticky top-0 z-30 bg-[#0b1b3d]"
-                  title="Stage 5: Final TC Applied to Final TC Received"
+                  className="py-1 px-2 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-center sticky top-0 z-30 bg-[#0b1b3d] h-8"
+                  title="Stage 5: Final TC Applied to Final TC Received (Target: ≤5d)"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>S5: Final TC</span>
@@ -686,26 +761,39 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
                 {/* 11. TOTAL LEAD TIME */}
                 <th
                   onClick={() => handleSort('totalLeadDays')}
-                  className="py-1.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d] shadow-[-2px_0_4px_rgba(0,0,0,0.2)]"
+                  className="py-1 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d] shadow-[-2px_0_4px_rgba(0,0,0,0.2)] h-8"
                 >
                   <div className="flex items-center gap-1 text-amber-300">
                     <Timer className="w-3.5 h-3.5" />
-                    <span>Total Lead Time</span>
+                    <span>Total Lead Time (SLA ≤{slaTargetDays}d)</span>
                     {renderSortIcon('totalLeadDays')}
                   </div>
                 </th>
 
-                {/* 12. CURRENT STATUS */}
-                <th className="py-1.5 px-2.5 border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]">
+                {/* 12. LEAD TIME SIGNAL */}
+                <th
+                  onClick={() => handleSort('signalLevel')}
+                  className="py-1 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d] h-8"
+                >
+                  <div className="flex items-center gap-1 text-red-300">
+                    <Siren className="w-3.5 h-3.5" />
+                    <span>Lead Time Signal</span>
+                    {renderSortIcon('signalLevel')}
+                  </div>
+                </th>
+
+                {/* 13. STATUS / TC # */}
+                <th className="py-1 px-2.5 border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d] h-8">
                   <span>Status / TC #</span>
                 </th>
               </tr>
             </thead>
 
+            {/* TBODY WITH STRICT UNIFORM h-8 HEIGHT FOR EVERY ROW */}
             <tbody className="divide-y divide-slate-200 text-xs font-mono">
               {filteredAndSortedList.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-slate-500 bg-white">
+                  <td colSpan={13} className="py-12 text-center text-slate-500 bg-white">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Timer className="w-8 h-8 text-slate-400" />
                       <p className="font-semibold text-sm text-slate-700">No matching lead time records found</p>
@@ -720,13 +808,15 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
                     <tr
                       key={pi.id}
                       onClick={() => onSelectPI(pi)}
-                      className={`group hover:bg-blue-50/60 cursor-pointer transition-colors ${
+                      className={`group hover:bg-blue-50/60 cursor-pointer transition-colors h-8 max-h-8 ${
                         idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'
-                      } ${isCurrentActive ? 'bg-blue-100/70 ring-1 ring-blue-500' : ''}`}
+                      } ${isCurrentActive ? 'bg-blue-100/70 ring-1 ring-blue-500' : ''} ${
+                        pi.signalLevel === 'critical' ? 'bg-red-50/20' : ''
+                      }`}
                     >
                       {/* 1. ORDER DATE */}
                       <td
-                        className={`py-1.5 px-2.5 text-slate-700 whitespace-nowrap border-r border-slate-200 sticky left-0 z-20 ${
+                        className={`py-1 px-2.5 text-slate-700 whitespace-nowrap border-r border-slate-200 sticky left-0 z-20 h-8 align-middle ${
                           idx % 2 === 0 ? 'bg-white' : 'bg-[#f9fafb]'
                         } group-hover:bg-blue-50/90 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]`}
                       >
@@ -735,7 +825,7 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
 
                       {/* 2. PI NO */}
                       <td
-                        className={`py-1.5 px-2.5 font-bold text-[#0b1b3d] whitespace-nowrap border-r border-slate-200 sticky left-[90px] z-20 ${
+                        className={`py-1 px-2.5 font-bold text-[#0b1b3d] whitespace-nowrap border-r border-slate-200 sticky left-[90px] z-20 h-8 align-middle ${
                           idx % 2 === 0 ? 'bg-white' : 'bg-[#f9fafb]'
                         } group-hover:bg-blue-50/90 shadow-[4px_0_6px_-2px_rgba(0,0,0,0.1)]`}
                       >
@@ -743,73 +833,76 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
                       </td>
 
                       {/* 3. BUYER */}
-                      <td className="py-1.5 px-2.5 text-slate-800 font-sans font-bold whitespace-nowrap border-r border-slate-200">
+                      <td className="py-1 px-2.5 text-slate-800 font-sans font-bold whitespace-nowrap border-r border-slate-200 h-8 align-middle">
                         {pi.buyer}
                       </td>
 
                       {/* 4. CUSTOMER */}
-                      <td className="py-1.5 px-2.5 text-slate-700 font-sans font-medium whitespace-nowrap border-r border-slate-200 max-w-[180px] truncate" title={pi.customer}>
+                      <td className="py-1 px-2.5 text-slate-700 font-sans font-medium whitespace-nowrap border-r border-slate-200 max-w-[170px] truncate h-8 align-middle" title={pi.customer}>
                         {pi.customer}
                       </td>
 
                       {/* 5. TC REQUEST DATE */}
-                      <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-slate-200">
+                      <td className="py-1 px-2.5 whitespace-nowrap border-r border-slate-200 h-8 align-middle">
                         {pi.tcRequestDate ? (
-                          <span className="bg-slate-100 px-1.5 py-0.5 rounded-xs border border-slate-200 text-slate-800">
+                          <span className="bg-slate-100 px-1.5 py-0.2 rounded-xs border border-slate-200 text-slate-800 text-[11px]">
                             {pi.tcRequestDate}
                           </span>
                         ) : (
-                          <span className="text-slate-400">-</span>
+                          <span className="text-slate-400 font-mono text-xs">-</span>
                         )}
                       </td>
 
                       {/* 6. STAGE 1 */}
-                      <td className="py-1.5 px-2 text-center whitespace-nowrap border-r border-slate-200">
-                        {renderDaysCell(pi.stage1Days)}
+                      <td className="py-1 px-2 text-center whitespace-nowrap border-r border-slate-200 h-8 align-middle">
+                        {renderStageCell(pi.stage1Days, 4)}
                       </td>
 
                       {/* 7. STAGE 2 */}
-                      <td className="py-1.5 px-2 text-center whitespace-nowrap border-r border-slate-200">
-                        {renderDaysCell(pi.stage2Days)}
+                      <td className="py-1 px-2 text-center whitespace-nowrap border-r border-slate-200 h-8 align-middle">
+                        {renderStageCell(pi.stage2Days, 5)}
                       </td>
 
                       {/* 8. STAGE 3 */}
-                      <td className="py-1.5 px-2 text-center whitespace-nowrap border-r border-slate-200">
-                        {renderDaysCell(pi.stage3Days)}
+                      <td className="py-1 px-2 text-center whitespace-nowrap border-r border-slate-200 h-8 align-middle">
+                        {renderStageCell(pi.stage3Days, 3)}
                       </td>
 
                       {/* 9. STAGE 4 */}
-                      <td className="py-1.5 px-2 text-center whitespace-nowrap border-r border-slate-200">
-                        {renderDaysCell(pi.stage4Days)}
+                      <td className="py-1 px-2 text-center whitespace-nowrap border-r border-slate-200 h-8 align-middle">
+                        {renderStageCell(pi.stage4Days, 3)}
                       </td>
 
                       {/* 10. STAGE 5 */}
-                      <td className="py-1.5 px-2 text-center whitespace-nowrap border-r border-slate-200">
-                        {renderDaysCell(pi.stage5Days)}
+                      <td className="py-1 px-2 text-center whitespace-nowrap border-r border-slate-200 h-8 align-middle">
+                        {renderStageCell(pi.stage5Days, 5)}
                       </td>
 
-                      {/* 11. TOTAL LEAD TIME */}
-                      <td className="py-1.5 px-3 whitespace-nowrap border-r border-slate-200">
+                      {/* 11. TOTAL LEAD TIME (Strict Single Line) */}
+                      <td className="py-1 px-3 whitespace-nowrap border-r border-slate-200 h-8 align-middle">
                         {pi.totalLeadDays !== null ? (
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 leading-none">
                             <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-xs font-bold text-xs ${
-                                pi.isCompleted
-                                  ? pi.totalLeadDays <= 15
-                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-                                    : pi.totalLeadDays <= 30
-                                    ? 'bg-blue-50 text-blue-800 border border-blue-300'
-                                    : 'bg-amber-50 text-amber-800 border border-amber-300'
-                                  : 'bg-slate-100 text-slate-800 border border-slate-300'
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs font-mono font-bold text-xs ${
+                                pi.signalLevel === 'critical'
+                                  ? 'bg-red-100 text-red-900 border border-red-300 font-black shadow-2xs'
+                                  : pi.signalLevel === 'warning'
+                                  ? 'bg-amber-50 text-amber-900 border border-amber-300'
+                                  : 'bg-emerald-50 text-emerald-800 border border-emerald-300'
                               }`}
                             >
                               <Timer className="w-3 h-3 text-slate-500" />
                               <span>{pi.totalLeadDays} Days</span>
                             </span>
+
                             {pi.isCompleted ? (
-                              <span className="text-[10px] font-sans text-emerald-700 font-semibold">Done</span>
+                              <span className="text-[10px] font-sans text-emerald-700 font-bold bg-emerald-100/80 px-1 py-0.2 rounded-xs">
+                                Done
+                              </span>
                             ) : (
-                              <span className="text-[10px] font-sans text-amber-600 font-semibold">Running</span>
+                              <span className="text-[10px] font-sans text-amber-700 font-bold bg-amber-100/80 px-1 py-0.2 rounded-xs">
+                                Active
+                              </span>
                             )}
                           </div>
                         ) : (
@@ -817,14 +910,39 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
                         )}
                       </td>
 
-                      {/* 12. STATUS / TC # */}
-                      <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-slate-200">
-                        <div className="flex items-center gap-1">
+                      {/* 12. LEAD TIME SIGNAL (Strict Single Line Badge) */}
+                      <td className="py-1 px-2.5 whitespace-nowrap border-r border-slate-200 h-8 align-middle">
+                        {pi.signalLevel === 'critical' ? (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xs font-bold text-[10px] bg-red-600 text-white border border-red-700 shadow-xs font-mono uppercase"
+                            title={pi.worstBottleneck ? `Overdue Alert! Delay source: ${pi.worstBottleneck}` : 'Overdue Alert (>20d)'}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping shrink-0" />
+                            <span>🚨 OVERDUE SIGNAL</span>
+                          </span>
+                        ) : pi.signalLevel === 'warning' ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs font-bold text-[10px] bg-amber-100 text-amber-900 border border-amber-300">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-600 shrink-0" />
+                            <span>⚠️ Warning (&gt;14d)</span>
+                          </span>
+                        ) : pi.signalLevel === 'normal' ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs font-bold text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-300">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                            <span>🟢 On-Time</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-mono text-xs">-</span>
+                        )}
+                      </td>
+
+                      {/* 13. STATUS / TC # */}
+                      <td className="py-1 px-2.5 whitespace-nowrap border-r border-slate-200 h-8 align-middle">
+                        <div className="flex items-center gap-1 leading-none">
                           <span className="text-[11px] font-bold text-slate-800 font-sans">
                             {computeAutomatedTcStatus(pi)}
                           </span>
                           {pi.tcNumber && (
-                            <span className="text-[10px] font-mono text-blue-700 bg-blue-50 px-1 rounded-xs">
+                            <span className="text-[10px] font-mono text-blue-700 bg-blue-50 px-1 py-0.2 rounded-xs">
                               #{pi.tcNumber}
                             </span>
                           )}
@@ -838,10 +956,10 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
 
             {/* Sticky Navy Summary Footer */}
             <tfoot className="sticky bottom-0 z-30 shadow-[0_-2px_4px_rgba(0,0,0,0.2)] select-none">
-              <tr className="bg-[#0b1b3d] text-white text-[11px] font-mono font-bold">
+              <tr className="bg-[#0b1b3d] text-white text-[11px] font-mono font-bold h-8">
                 <td
                   colSpan={4}
-                  className="py-2 px-2.5 border-r border-[#1a386b] whitespace-nowrap sticky bottom-0 left-0 z-40 bg-[#0b1b3d] shadow-[4px_0_6px_-2px_rgba(0,0,0,0.35)]"
+                  className="py-1.5 px-2.5 border-r border-[#1a386b] whitespace-nowrap sticky bottom-0 left-0 z-40 bg-[#0b1b3d] shadow-[4px_0_6px_-2px_rgba(0,0,0,0.35)] h-8 align-middle"
                 >
                   <div className="flex items-center justify-between">
                     <span className="uppercase text-[10px] tracking-wider text-blue-200">Averages Summary</span>
@@ -849,36 +967,40 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
                   </div>
                 </td>
 
-                <td className="py-2 px-2.5 text-slate-300 border-r border-[#1a386b] text-[10px] font-sans">
+                <td className="py-1.5 px-2.5 text-slate-300 border-r border-[#1a386b] text-[10px] font-sans h-8 align-middle">
                   Stage Averages:
                 </td>
 
-                <td className="py-2 px-2 text-center text-blue-200 border-r border-[#1a386b]">
+                <td className="py-1.5 px-2 text-center text-blue-200 border-r border-[#1a386b] h-8 align-middle">
                   {metrics.avgS1}d
                 </td>
 
-                <td className="py-2 px-2 text-center text-blue-200 border-r border-[#1a386b]">
+                <td className="py-1.5 px-2 text-center text-blue-200 border-r border-[#1a386b] h-8 align-middle">
                   {metrics.avgS2}d
                 </td>
 
-                <td className="py-2 px-2 text-center text-blue-200 border-r border-[#1a386b]">
+                <td className="py-1.5 px-2 text-center text-blue-200 border-r border-[#1a386b] h-8 align-middle">
                   {metrics.avgS3}d
                 </td>
 
-                <td className="py-2 px-2 text-center text-blue-200 border-r border-[#1a386b]">
+                <td className="py-1.5 px-2 text-center text-blue-200 border-r border-[#1a386b] h-8 align-middle">
                   {metrics.avgS4}d
                 </td>
 
-                <td className="py-2 px-2 text-center text-emerald-300 border-r border-[#1a386b]">
+                <td className="py-1.5 px-2 text-center text-emerald-300 border-r border-[#1a386b] h-8 align-middle">
                   {metrics.avgS5}d
                 </td>
 
-                <td className="py-2 px-3 border-r border-[#1a386b] text-amber-300 font-bold">
+                <td className="py-1.5 px-3 border-r border-[#1a386b] text-amber-300 font-bold h-8 align-middle">
                   Avg: {metrics.avgTotal} Days
                 </td>
 
-                <td className="py-2 px-2.5 text-slate-300 text-[10px] font-sans">
-                  Completed: {metrics.completedCount} / {metrics.totalTracked}
+                <td className="py-1.5 px-2.5 text-red-300 border-r border-[#1a386b] h-8 align-middle">
+                  Overdue: {metrics.criticalCount}
+                </td>
+
+                <td className="py-1.5 px-2.5 text-slate-300 text-[10px] font-sans h-8 align-middle">
+                  Done: {metrics.completedCount} / {metrics.totalTracked}
                 </td>
               </tr>
             </tfoot>

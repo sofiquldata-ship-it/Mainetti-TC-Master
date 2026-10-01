@@ -74,6 +74,19 @@ function getDaysSinceDate(dateStr?: string): number | null {
   return Math.max(0, days);
 }
 
+/**
+ * Calculates days between two date strings (e.g. TC Request Date -> Comm Doc Received Date)
+ */
+function getDaysBetween(startStr?: string, endStr?: string): number | null {
+  if (!startStr || !startStr.trim() || !endStr || !endStr.trim()) return null;
+  const start = new Date(startStr.trim().replace(/\//g, '-'));
+  const end = new Date(endStr.trim().replace(/\//g, '-'));
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
+  const diffTime = end.getTime() - start.getTime();
+  const days = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  return Math.max(0, days);
+}
+
 export const CommercialFollowUpView: React.FC<CommercialFollowUpViewProps> = ({
   data,
   filters,
@@ -219,8 +232,20 @@ export const CommercialFollowUpView: React.FC<CommercialFollowUpViewProps> = ({
       if (sortField === 'daysPending') {
         const hasRecA = !!(a.receivedCommercialDocDate && a.receivedCommercialDocDate.trim());
         const hasRecB = !!(b.receivedCommercialDocDate && b.receivedCommercialDocDate.trim());
-        valA = hasRecA ? -1 : (getDaysSinceDate(a.tcRequestDate) ?? -2);
-        valB = hasRecB ? -1 : (getDaysSinceDate(b.tcRequestDate) ?? -2);
+        const hasReqA = !!(a.tcRequestDate && a.tcRequestDate.trim());
+        const hasReqB = !!(b.tcRequestDate && b.tcRequestDate.trim());
+
+        valA = !hasReqA
+          ? -999
+          : hasRecA
+          ? (getDaysBetween(a.tcRequestDate, a.receivedCommercialDocDate) ?? 0)
+          : (getDaysSinceDate(a.tcRequestDate) ?? 0);
+
+        valB = !hasReqB
+          ? -999
+          : hasRecB
+          ? (getDaysBetween(b.tcRequestDate, b.receivedCommercialDocDate) ?? 0)
+          : (getDaysSinceDate(b.tcRequestDate) ?? 0);
       } else if (sortField === 'piAgeDays') {
         valA = calculatePiAgeDays(a.orderDate, a.piAgeDays);
         valB = calculatePiAgeDays(b.orderDate, b.piAgeDays);
@@ -387,9 +412,71 @@ export const CommercialFollowUpView: React.FC<CommercialFollowUpViewProps> = ({
     document.body.removeChild(link);
   };
 
-  // Badge renderer for Days Commercial Doc Not Received
-  const renderDaysBadge = (pi: PIData) => {
-    // 1. If document is marked received:
+  // 1. Pure Day Count Badge renderer for "Doc Pending Days"
+  const renderDaysCountBadge = (pi: PIData) => {
+    // If NO TC Request Date:
+    if (!pi.tcRequestDate || pi.tcRequestDate.trim() === '') {
+      return <span className="text-slate-400 font-mono text-xs">-</span>;
+    }
+
+    // A. If document is ALREADY received: show the actual days it took
+    if (pi.receivedCommercialDocDate && pi.receivedCommercialDocDate.trim() !== '') {
+      const days = getDaysBetween(pi.tcRequestDate, pi.receivedCommercialDocDate);
+      if (days !== null) {
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
+            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+            <span className="font-mono">{days}</span>
+            <span>{days === 1 ? 'Day' : 'Days'}</span>
+          </span>
+        );
+      }
+      return <span className="text-emerald-700 font-mono text-xs font-semibold">Received</span>;
+    }
+
+    // B. Document is still pending: calculate days from tcRequestDate to today
+    const days = getDaysSinceDate(pi.tcRequestDate);
+    if (days === null) {
+      return <span className="text-slate-400 font-mono text-xs">-</span>;
+    }
+
+    // 0-7 Days: Green
+    if (days <= 7) {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-2xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+          <span className="font-mono">{days}</span>
+          <span>{days === 1 ? 'Day' : 'Days'}</span>
+        </span>
+      );
+    }
+
+    // 8-14 Days: Amber
+    if (days <= 14) {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+          <span className="font-mono">{days}</span>
+          <span>Days</span>
+        </span>
+      );
+    }
+
+    // 15+ Days: Red & Action Required
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-bold bg-red-50 text-red-700 border border-red-300 animate-pulse shadow-2xs">
+        <AlertTriangle className="w-3 h-3 text-red-600 shrink-0" />
+        <span className="font-mono">{days}</span>
+        <span>Days</span>
+        <span className="text-[9px] font-mono uppercase tracking-tight bg-red-200/80 text-red-900 px-1 rounded-xs">
+          15+ Overdue
+        </span>
+      </span>
+    );
+  };
+
+  // 2. Separate renderer for "Comm. Doc Received Date" column
+  const renderCommDocStatusBadge = (pi: PIData) => {
     if (pi.receivedCommercialDocDate && pi.receivedCommercialDocDate.trim() !== '') {
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xs text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
@@ -402,50 +489,16 @@ export const CommercialFollowUpView: React.FC<CommercialFollowUpViewProps> = ({
       );
     }
 
-    // 2. If NO TC Request Date:
-    if (!pi.tcRequestDate || pi.tcRequestDate.trim() === '') {
-      return <span className="text-slate-400 font-mono text-xs">-</span>;
-    }
-
-    // 3. Document waiting with TC request date:
-    const days = getDaysSinceDate(pi.tcRequestDate);
-    if (days === null) {
-      return <span className="text-slate-400 font-mono text-xs">-</span>;
-    }
-
-    // 0-7 Days: Green
-    if (days <= 7) {
+    if (pi.tcRequestDate && pi.tcRequestDate.trim() !== '') {
       return (
-        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-300">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-          <span className="font-mono">{days}</span>
-          <span>{days === 1 ? 'Day' : 'Days'}</span>
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xs text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+          <Clock className="w-3 h-3 text-amber-600 shrink-0" />
+          <span>Waiting Document</span>
         </span>
       );
     }
 
-    // 8-14 Days: Amber
-    if (days <= 14) {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-300">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-          <span className="font-mono">{days}</span>
-          <span>Days</span>
-        </span>
-      );
-    }
-
-    // 15+ Days: Red & Action Required
-    return (
-      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-bold bg-red-50 text-red-700 border border-red-300 animate-pulse">
-        <AlertTriangle className="w-3 h-3 text-red-600 shrink-0" />
-        <span className="font-mono">{days}</span>
-        <span>Days</span>
-        <span className="text-[9px] font-mono uppercase tracking-tight bg-red-200/80 text-red-900 px-1 rounded-xs">
-          15+ Overdue
-        </span>
-      </span>
-    );
+    return <span className="text-slate-400 font-mono text-xs">-</span>;
   };
 
   // Calculate totals for footer
@@ -923,19 +976,30 @@ export const CommercialFollowUpView: React.FC<CommercialFollowUpViewProps> = ({
                   </div>
                 </th>
 
-                {/* 10. DAYS COMMERCIAL DOC NOT RECEIVED (Key Follow-up column) */}
+                {/* 10. DOC PENDING DAYS (Day Count Column) */}
                 <th
                   onClick={() => handleSort('daysPending')}
                   className="py-1.5 px-3 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d] shadow-[-2px_0_4px_rgba(0,0,0,0.2)]"
                 >
                   <div className="flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5 text-amber-300" />
-                    <span>Days Commercial Doc Not Received</span>
+                    <span>Doc Pending Days</span>
                     {renderSortIcon('daysPending')}
                   </div>
                 </th>
 
-                {/* 11. QUICK ACTION: COMM. DOC RECEIVED */}
+                {/* 11. DOC RECEIVED DATE / STATUS */}
+                <th
+                  onClick={() => handleSort('receivedCommercialDocDate')}
+                  className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Doc Received Date</span>
+                    {renderSortIcon('receivedCommercialDocDate')}
+                  </div>
+                </th>
+
+                {/* 12. QUICK ACTION: MARK COMM. DOC RECEIVED */}
                 <th className="py-1.5 px-2.5 text-center border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]">
                   <span>Action / Follow-up</span>
                 </th>
@@ -946,7 +1010,7 @@ export const CommercialFollowUpView: React.FC<CommercialFollowUpViewProps> = ({
             <tbody className="divide-y divide-slate-200 text-xs font-mono">
               {filteredAndSortedData.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-slate-500 bg-white">
+                  <td colSpan={13} className="py-12 text-center text-slate-500 bg-white">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <FileQuestion className="w-8 h-8 text-slate-400" />
                       <p className="font-semibold text-sm text-slate-700">No records found matching criteria</p>
@@ -1082,12 +1146,17 @@ export const CommercialFollowUpView: React.FC<CommercialFollowUpViewProps> = ({
                         )}
                       </td>
 
-                      {/* 10. DAYS COMMERCIAL DOC NOT RECEIVED */}
+                      {/* 10. DAYS COMMERCIAL DOC NOT RECEIVED (Pure Day Count Badge) */}
                       <td className="py-1.5 px-3 whitespace-nowrap border-r border-slate-200">
-                        {renderDaysBadge(pi)}
+                        {renderDaysCountBadge(pi)}
                       </td>
 
-                      {/* 11. QUICK ACTION: MARK COMM. DOC RECEIVED */}
+                      {/* 11. COMM. DOC RECEIVED DATE / STATUS (Dedicated Column) */}
+                      <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-slate-200">
+                        {renderCommDocStatusBadge(pi)}
+                      </td>
+
+                      {/* 12. QUICK ACTION: MARK COMM. DOC RECEIVED */}
                       <td className="py-1 px-2 text-center whitespace-nowrap border-r border-slate-200">
                         {isDocReceived ? (
                           <span className="text-[10px] text-emerald-700 font-semibold font-sans">
@@ -1156,14 +1225,19 @@ export const CommercialFollowUpView: React.FC<CommercialFollowUpViewProps> = ({
                   Waiting: {footerTotals.waitingCount} PIs
                 </td>
 
-                {/* 10. Avg Days Pending */}
+                {/* 10. Avg Days Pending (Day Count col) */}
                 <td className="py-2 px-3 border-r border-[#1a386b] whitespace-nowrap">
                   <span className="text-amber-300 text-xs font-bold">
                     Avg: {footerTotals.avgDays} Days
                   </span>
                 </td>
 
-                {/* 11. Action footer */}
+                {/* 11. Comm. Doc Status Col */}
+                <td className="py-2 px-2.5 text-slate-300 border-r border-[#1a386b] text-[10px] font-sans">
+                  Received: {counts.received} PIs
+                </td>
+
+                {/* 12. Action footer */}
                 <td className="py-2 px-2 text-center text-slate-400 text-[10px] font-sans">
                   Live Follow-up
                 </td>
