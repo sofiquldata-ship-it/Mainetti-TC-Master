@@ -39,6 +39,8 @@ type SortField =
   | 'orderDate'
   | 'piAgeDays'
   | 'piNumber'
+  | 'invoiceNumber'
+  | 'invoiceDate'
   | 'buyer'
   | 'customer'
   | 'contactPerson'
@@ -545,12 +547,23 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
 
               {/* 3.5. INVOICE NUMBER - FROZEN TOP */}
               <th
-                onClick={() => handleSort('invoiceNumber' as any)}
+                onClick={() => handleSort('invoiceNumber')}
                 className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
               >
                 <div className="flex items-center gap-1">
                   <span>Invoice Number</span>
-                  {renderSortIcon('invoiceNumber' as any)}
+                  {renderSortIcon('invoiceNumber')}
+                </div>
+              </th>
+
+              {/* 3.6. INVOICE DATE - FROZEN TOP */}
+              <th
+                onClick={() => handleSort('invoiceDate')}
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+              >
+                <div className="flex items-center gap-1">
+                  <span>Invoice Date</span>
+                  {renderSortIcon('invoiceDate')}
                 </div>
               </th>
 
@@ -738,7 +751,7 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
           <tbody className="divide-y divide-slate-200 text-xs">
             {filteredData.length === 0 ? (
               <tr>
-                <td colSpan={19} className="py-8 text-center text-slate-500 bg-slate-50/50">
+                <td colSpan={20} className="py-8 text-center text-slate-500 bg-slate-50/50">
                   <div className="flex flex-col items-center justify-center gap-1">
                     <CheckCircle2 className="w-6 h-6 text-slate-400" />
                     <span className="font-semibold text-slate-700">No PIs match the selected view criteria</span>
@@ -907,6 +920,25 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                       ) : (
                         <span className="px-1.5 py-0.5 border border-dashed border-slate-300 text-slate-400 rounded-xs text-[9px] font-normal hover:border-blue-400 hover:text-blue-700 transition-colors">
                           + Add Inv #
+                        </span>
+                      )}
+                    </td>
+
+                    {/* 3.6. INVOICE DATE */}
+                    <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-slate-100 font-mono">
+                      {pi.invoiceDate ? (
+                        <span
+                          className={`px-2 py-0.5 rounded-xs text-[10px] font-bold inline-block shadow-2xs ${
+                            isFinalReceived
+                              ? 'bg-emerald-50 border border-emerald-300 text-emerald-900'
+                              : 'bg-slate-100 border border-slate-300 text-slate-800'
+                          }`}
+                        >
+                          {pi.invoiceDate}
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 border border-dashed border-slate-300 text-slate-400 rounded-xs text-[9px] font-normal hover:border-blue-400 hover:text-blue-700 transition-colors">
+                          + Add Date
                         </span>
                       )}
                     </td>

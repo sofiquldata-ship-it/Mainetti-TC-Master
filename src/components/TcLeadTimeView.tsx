@@ -1034,11 +1034,6 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
                                 <span className={`w-1.5 h-1.5 rounded-full ${actionable.dotColor} shrink-0`} />
                                 <span>{actionable.statusLabel}</span>
                               </span>
-                              {pi.tcNumber && !actionable.statusLabel.includes(pi.tcNumber) && (
-                                <span className="text-[10px] font-mono text-blue-700 bg-blue-50 px-1 py-0.2 rounded-xs border border-blue-200">
-                                  #{pi.tcNumber}
-                                </span>
-                              )}
                             </div>
                           );
                         })()}

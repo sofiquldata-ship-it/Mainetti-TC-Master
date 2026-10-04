@@ -58,6 +58,7 @@ export interface PIData {
   expectedTcDate: string;
   deliveryStatus: DeliveryStatus;
   invoiceNumber?: string;
+  invoiceDate?: string;
   standard: string;
   certBody: string;
   quantityPcs: number;
@@ -254,7 +255,7 @@ export function computeActionableWaitingStatus(item: Partial<PIData>): Actionabl
   const hasFinalRec = !!(item.finalTcReceivedDate && item.finalTcReceivedDate.trim());
   if (hasFinalRec) {
     return {
-      statusLabel: item.tcNumber ? `Final TC Issued (#${item.tcNumber})` : 'Final TC Completed',
+      statusLabel: 'Final TC Issued',
       stageCode: 'DONE',
       stageName: 'Completed',
       actionText: 'Transaction Certificate Successfully Issued',

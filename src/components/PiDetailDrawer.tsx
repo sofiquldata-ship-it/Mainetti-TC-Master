@@ -47,6 +47,7 @@ export const PiDetailDrawer: React.FC<PiDetailDrawerProps> = ({
   const [finalRecDate, setFinalRecDate] = useState<string>('');
   const [tcNum, setTcNum] = useState<string>('');
   const [invoiceNo, setInvoiceNo] = useState<string>('');
+  const [invoiceDt, setInvoiceDt] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
 
   useEffect(() => {
@@ -60,6 +61,7 @@ export const PiDetailDrawer: React.FC<PiDetailDrawerProps> = ({
       setFinalRecDate(pi.finalTcReceivedDate || '');
       setTcNum(pi.tcNumber || '');
       setInvoiceNo(pi.invoiceNumber || '');
+      setInvoiceDt(pi.invoiceDate || '');
       setNotes(pi.notes || '');
     }
   }, [pi?.id]);
@@ -88,6 +90,7 @@ export const PiDetailDrawer: React.FC<PiDetailDrawerProps> = ({
       finalTcReceivedDate: overrides.finalTcReceivedDate !== undefined ? overrides.finalTcReceivedDate : (finalRecDate || undefined),
       tcNumber: overrides.tcNumber !== undefined ? overrides.tcNumber : (tcNum || undefined),
       invoiceNumber: overrides.invoiceNumber !== undefined ? overrides.invoiceNumber : (invoiceNo || undefined),
+      invoiceDate: overrides.invoiceDate !== undefined ? overrides.invoiceDate : (invoiceDt || undefined),
       notes: overrides.notes !== undefined ? overrides.notes : notes,
     };
 
@@ -247,42 +250,94 @@ export const PiDetailDrawer: React.FC<PiDetailDrawerProps> = ({
             </div>
           </div>
 
-          {/* Commercial Invoice Number Entry */}
-          <div className="bg-blue-50/70 border border-blue-200 p-3 rounded-sm space-y-1.5 shadow-2xs">
+          {/* Commercial Invoice Details (Number & Date) */}
+          <div className="bg-blue-50/70 border border-blue-200 p-3 rounded-sm space-y-2.5 shadow-2xs">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-[#0b1b3d] flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-blue-600" />
-                <span>Commercial Invoice Number</span>
+                <span>Commercial Invoice Details</span>
               </label>
               <span className="text-[10px] text-blue-700 font-mono font-medium">
                 (Manual Input / From Document)
               </span>
             </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Enter Invoice No (e.g. INV-2026-90412 / MSF-8812)"
-                value={invoiceNo}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setInvoiceNo(val);
-                  applyWorkflowUpdate({ invoiceNumber: val || undefined });
-                }}
-                className="flex-1 py-1.5 px-3 bg-white border border-blue-300 rounded-xs text-xs font-mono font-bold text-[#0b1b3d] focus:border-blue-700 focus:ring-1 focus:ring-blue-700 focus:outline-none placeholder:font-normal placeholder:text-slate-400"
-              />
-              {invoiceNo && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInvoiceNo('');
-                    applyWorkflowUpdate({ invoiceNumber: undefined });
-                  }}
-                  className="px-2.5 py-1 text-[11px] font-medium text-slate-500 hover:text-red-700 bg-white border border-slate-300 rounded-xs hover:bg-red-50 transition-colors"
-                  title="Clear Invoice Number"
-                >
-                  Clear
-                </button>
-              )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Invoice Number */}
+              <div>
+                <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                  Invoice Number
+                </label>
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    placeholder="e.g. INV-2026-90412 / MSF-8812"
+                    value={invoiceNo}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setInvoiceNo(val);
+                      applyWorkflowUpdate({ invoiceNumber: val || undefined });
+                    }}
+                    className="flex-1 py-1.5 px-2.5 bg-white border border-blue-300 rounded-xs text-xs font-mono font-bold text-[#0b1b3d] focus:border-blue-700 focus:ring-1 focus:ring-blue-700 focus:outline-none placeholder:font-normal placeholder:text-slate-400"
+                  />
+                  {invoiceNo && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInvoiceNo('');
+                        applyWorkflowUpdate({ invoiceNumber: undefined });
+                      }}
+                      className="px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-red-700 bg-white border border-slate-300 rounded-xs hover:bg-red-50 transition-colors cursor-pointer"
+                      title="Clear Invoice Number"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Invoice Date */}
+              <div>
+                <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                  Invoice Date
+                </label>
+                <div className="flex gap-1.5">
+                  <input
+                    type="date"
+                    value={invoiceDt}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setInvoiceDt(val);
+                      applyWorkflowUpdate({ invoiceDate: val || undefined });
+                    }}
+                    className="flex-1 py-1.5 px-2.5 bg-white border border-blue-300 rounded-xs text-xs font-mono font-bold text-[#0b1b3d] focus:border-blue-700 focus:ring-1 focus:ring-blue-700 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const today = getTodayStr();
+                      setInvoiceDt(today);
+                      applyWorkflowUpdate({ invoiceDate: today });
+                    }}
+                    className="px-2 py-1 bg-white hover:bg-blue-100 text-blue-900 text-[10px] font-bold rounded-xs border border-blue-300 cursor-pointer transition-colors shadow-2xs"
+                  >
+                    Today
+                  </button>
+                  {invoiceDt && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInvoiceDt('');
+                        applyWorkflowUpdate({ invoiceDate: undefined });
+                      }}
+                      className="px-1.5 py-1 text-[11px] font-medium text-slate-500 hover:text-red-700 bg-white border border-slate-300 rounded-xs hover:bg-red-50 transition-colors cursor-pointer"
+                      title="Clear Invoice Date"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 

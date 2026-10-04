@@ -297,6 +297,7 @@ export async function parseExcelFile(
   const balQtyCol = findColIndex(['balance quantity', 'balance qty', 'bal qty', 'remaining qty', 'balance pcs', 'bal pcs', 'undelivered qty']);
   const poRefCol = findColIndex(['po reference', 'po ref', 'po number', 'po#', 'buyer po', 'po no']);
   const invoiceNumberCol = findColIndex(['invoice number', 'invoice no', 'inv no', 'invoice#', 'inv#', 'commercial invoice', 'commercial invoice no', 'invoice']);
+  const invoiceDateCol = findColIndex(['invoice date', 'inv date', 'commercial invoice date', 'inv dt', 'invoice dt', 'commercial date']);
   const styleCol = findColIndex(['style no', 'style', 'styleno', 'item style', 'style#', 'buyer style']);
   const widthCol = findColIndex(['width', 'w(mm)', 'w (mm)', 'w', 'width(mm)', 'width mm']);
   const lengthCol = findColIndex(['length', 'l(mm)', 'l (mm)', 'l', 'length(mm)', 'length mm', 'height']);
@@ -348,6 +349,7 @@ export async function parseExcelFile(
     finalTcReceivedDate?: string;
     tcNumber?: string;
     invoiceNumber?: string;
+    invoiceDate?: string;
     contactPerson?: string;
   }
 
@@ -532,6 +534,7 @@ export async function parseExcelFile(
     const parsedBalQ = rawRowBalQ <= 1 ? 0 : rawRowBalQ;
 
     const invNum = invoiceNumberCol !== -1 && rowArray[invoiceNumberCol] ? String(rowArray[invoiceNumberCol]).trim() : undefined;
+    const invDate = invoiceDateCol !== -1 && rowArray[invoiceDateCol] ? parseDateValue(rowArray[invoiceDateCol]) : undefined;
     const rawContactPerson = contactPersonCol !== -1 && rowArray[contactPersonCol] ? String(rowArray[contactPersonCol]).trim() : undefined;
 
     if (!piGroups[groupKey]) {
@@ -546,6 +549,7 @@ export async function parseExcelFile(
         paymentStatus,
         deliveryStatus,
         invoiceNumber: invNum,
+        invoiceDate: invDate,
         contactPerson: rawContactPerson,
         standard,
         certBody,
@@ -767,6 +771,7 @@ export async function parseExcelFile(
         deliveryStatus: finalDeliveryStatus,
         orderStatus: group.orderStatus || '',
         invoiceNumber: group.invoiceNumber || '',
+        invoiceDate: group.invoiceDate || '',
         contactPerson: group.contactPerson || 'System',
         standard: group.standard,
         certBody: group.certBody,

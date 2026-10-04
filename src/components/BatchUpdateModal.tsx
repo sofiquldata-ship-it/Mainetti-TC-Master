@@ -30,6 +30,7 @@ export const BatchUpdateModal: React.FC<BatchUpdateModalProps> = ({
 
   // Local state for batch update fields
   const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState('');
   const [tcRequestDate, setTcRequestDate] = useState('');
   const [receivedCommercialDocDate, setReceivedCommercialDocDate] = useState('');
   const [draftTcDate, setDraftTcDate] = useState('');
@@ -43,6 +44,7 @@ export const BatchUpdateModal: React.FC<BatchUpdateModalProps> = ({
 
   // Checkbox toggles for active fields to apply
   const [applyInvoice, setApplyInvoice] = useState(true);
+  const [applyInvoiceDate, setApplyInvoiceDate] = useState(false);
   const [applyCommDoc, setApplyCommDoc] = useState(false);
   const [applyTcReqDate, setApplyTcReqDate] = useState(false);
   const [applyDraftTcDate, setApplyDraftTcDate] = useState(false);
@@ -62,6 +64,7 @@ export const BatchUpdateModal: React.FC<BatchUpdateModalProps> = ({
     const updates: Partial<PIData> = {};
 
     if (applyInvoice) updates.invoiceNumber = invoiceNumber.trim() || undefined;
+    if (applyInvoiceDate) updates.invoiceDate = invoiceDate || undefined;
     if (applyTcReqDate) updates.tcRequestDate = tcRequestDate || undefined;
     if (applyCommDoc) updates.receivedCommercialDocDate = receivedCommercialDocDate || undefined;
     if (applyDraftTcDate) updates.draftTcDate = draftTcDate || undefined;
@@ -144,36 +147,70 @@ export const BatchUpdateModal: React.FC<BatchUpdateModalProps> = ({
                 </p>
               </div>
 
-              {/* SECTION 1: Commercial Invoice Number */}
-              <div className="border border-slate-200 rounded-xs p-3.5 bg-white space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-[#0b1b3d]">
+              {/* SECTION 1: Commercial Invoice Details (Number & Date) */}
+              <div className="border border-slate-200 rounded-xs p-3.5 bg-white space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Invoice Number */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-1.5 cursor-pointer font-bold text-xs text-[#0b1b3d]">
+                        <input
+                          type="checkbox"
+                          checked={applyInvoice}
+                          onChange={(e) => setApplyInvoice(e.target.checked)}
+                          className="w-3.5 h-3.5 accent-[#0b1b3d] rounded-xs cursor-pointer"
+                        />
+                        <Receipt className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Invoice Number</span>
+                      </label>
+                    </div>
                     <input
-                      type="checkbox"
-                      checked={applyInvoice}
-                      onChange={(e) => setApplyInvoice(e.target.checked)}
-                      className="w-4 h-4 accent-[#0b1b3d] rounded-xs cursor-pointer"
+                      type="text"
+                      placeholder="e.g. INV-2026-90412"
+                      value={invoiceNumber}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setInvoiceNumber(val);
+                        setApplyInvoice(val.trim().length > 0);
+                      }}
+                      className={`w-full py-1.5 px-2.5 border rounded-xs text-xs font-mono font-bold focus:outline-none transition-colors ${
+                        applyInvoice
+                          ? 'bg-blue-50/50 border-blue-400 text-slate-900'
+                          : 'bg-slate-50 border-slate-300 text-slate-500'
+                      }`}
                     />
-                    <Receipt className="w-4 h-4 text-blue-600" />
-                    <span>Commercial Invoice Number</span>
-                  </label>
-                  <span className="text-[10px] text-slate-400 font-mono">Shared Across Selected PIs</span>
+                  </div>
+
+                  {/* Invoice Date */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-1.5 cursor-pointer font-bold text-xs text-[#0b1b3d]">
+                        <input
+                          type="checkbox"
+                          checked={applyInvoiceDate}
+                          onChange={(e) => setApplyInvoiceDate(e.target.checked)}
+                          className="w-3.5 h-3.5 accent-[#0b1b3d] rounded-xs cursor-pointer"
+                        />
+                        <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Invoice Date</span>
+                      </label>
+                    </div>
+                    <input
+                      type="date"
+                      value={invoiceDate}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setInvoiceDate(val);
+                        setApplyInvoiceDate(val !== '');
+                      }}
+                      className={`w-full py-1.5 px-2.5 border rounded-xs text-xs font-mono font-bold focus:outline-none transition-colors ${
+                        applyInvoiceDate
+                          ? 'bg-blue-50/50 border-blue-400 text-slate-900'
+                          : 'bg-slate-50 border-slate-300 text-slate-500'
+                      }`}
+                    />
+                  </div>
                 </div>
-                <input
-                  type="text"
-                  placeholder="e.g. INV-2026-90412 / MSF-8812"
-                  value={invoiceNumber}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setInvoiceNumber(val);
-                    setApplyInvoice(val.trim().length > 0);
-                  }}
-                  className={`w-full py-1.5 px-3 border rounded-xs text-xs font-mono font-bold focus:outline-none transition-colors ${
-                    applyInvoice
-                      ? 'bg-blue-50/50 border-blue-400 text-slate-900'
-                      : 'bg-slate-50 border-slate-300 text-slate-500'
-                  }`}
-                />
               </div>
 
               {/* SECTION 2: TC Workflow Dates */}
