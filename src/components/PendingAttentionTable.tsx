@@ -1,5 +1,14 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { PIData, TCStatus, computeAutomatedTcStatus, calculatePiAgeDays, isCancelledStatus, isCancelledOrder, isCancelledPi } from '../types/tc';
+import {
+  PIData,
+  TCStatus,
+  computeAutomatedTcStatus,
+  computeActionableWaitingStatus,
+  calculatePiAgeDays,
+  isCancelledStatus,
+  isCancelledOrder,
+  isCancelledPi,
+} from '../types/tc';
 import { BatchUpdateModal } from './BatchUpdateModal';
 import {
   ArrowUpDown,
@@ -80,64 +89,69 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
     }
   };
 
-  // Status Badge Renderer strictly based on automated status:
-  // Not Requested → TC Requested → Commercial Doc Received → Draft TC Received → Draft Confirmed → Revision → Final TC Applied → Final TC Received
-  const renderStatusBadge = (status: TCStatus) => {
+  // Status Badge Renderer strictly based on actionable waiting stage & automated status:
+  const renderStatusBadge = (status: TCStatus, item?: PIData) => {
+    if (item) {
+      const actionable = computeActionableWaitingStatus(item);
+      return (
+        <span
+          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-bold border shadow-2xs ${actionable.badgeBg} ${actionable.badgeText} ${actionable.badgeBorder}`}
+          title={actionable.actionText}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${actionable.dotColor} shrink-0`} />
+          <span>{actionable.statusLabel}</span>
+        </span>
+      );
+    }
+
     switch (status) {
       case 'Final TC Received':
         return (
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" />
-            <span>Final TC Received</span>
+            <span>Final TC Completed</span>
           </span>
         );
       case 'Final TC Applied':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-semibold bg-purple-50 text-purple-800 border border-purple-300">
-            <span className="w-1.5 h-1.5 rounded-full bg-purple-600 shrink-0" />
-            <span>Final TC Applied</span>
-          </span>
-        );
-      case 'Revision':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-400 animate-pulse">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-600 shrink-0" />
-            <span>Revision</span>
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-semibold bg-teal-50 text-teal-800 border border-teal-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-teal-600 shrink-0" />
+            <span>Waiting for Final Release</span>
           </span>
         );
       case 'Draft Confirmed':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-semibold bg-teal-50 text-teal-800 border border-teal-300">
-            <span className="w-1.5 h-1.5 rounded-full bg-teal-600 shrink-0" />
-            <span>Draft Confirmed</span>
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-semibold bg-purple-50 text-purple-800 border border-purple-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-600 shrink-0" />
+            <span>Waiting for Final Apply</span>
           </span>
         );
       case 'Draft TC Received':
         return (
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-semibold bg-blue-50 text-blue-800 border border-blue-300">
             <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0" />
-            <span>Draft TC Received</span>
+            <span>Waiting for Confirmation</span>
           </span>
         );
       case 'Commercial Doc Received':
         return (
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-semibold bg-cyan-50 text-cyan-800 border border-cyan-300">
             <span className="w-1.5 h-1.5 rounded-full bg-cyan-600 shrink-0" />
-            <span>Commercial Doc Received</span>
+            <span>Waiting for Draft TC</span>
           </span>
         );
       case 'TC Requested':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-300">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 shrink-0" />
-            <span>TC Requested</span>
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-600 shrink-0" />
+            <span>Waiting for Comm Doc</span>
           </span>
         );
       case 'Overdue':
         return (
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-bold bg-red-50 text-red-700 border border-red-300 animate-pulse">
             <span className="w-1.5 h-1.5 rounded-full bg-red-600 shrink-0" />
-            <span>Overdue</span>
+            <span>Overdue Alert</span>
           </span>
         );
       case 'Not Requested':
@@ -145,7 +159,7 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
         return (
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-xs text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-300">
             <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
-            <span>Not Requested</span>
+            <span>Waiting for TC Request</span>
           </span>
         );
     }
@@ -1065,7 +1079,7 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                       }`}
                     >
                       <div className="flex items-center justify-between gap-1 min-w-[140px]">
-                        {renderStatusBadge(currentStatus)}
+                        {renderStatusBadge(currentStatus, pi)}
                         <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#1e3a8a] transition-transform group-hover:translate-x-0.5" />
                       </div>
                     </td>

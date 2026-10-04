@@ -11,6 +11,7 @@ import {
   RefreshCw,
   PanelLeftClose,
   FileText,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { UploadedFileInfo } from '../types/tc';
 
@@ -92,6 +93,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badgeColor: activeFileInfo
         ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 font-semibold'
         : 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+    },
+    {
+      id: 'Commercial Doc Reader',
+      label: 'Commercial Doc Reader',
+      icon: FileSpreadsheet,
+      badge: '5 Sheets',
+      badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 font-semibold',
     },
   ];
 

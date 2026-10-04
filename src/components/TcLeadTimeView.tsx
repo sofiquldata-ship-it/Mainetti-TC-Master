@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { PIData, computeAutomatedTcStatus } from '../types/tc';
+import { PIData, computeAutomatedTcStatus, computeActionableWaitingStatus } from '../types/tc';
 import { FilterBar } from './FilterBar';
 import {
   Timer,
@@ -1022,18 +1022,26 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
                         )}
                       </td>
 
-                      {/* 13. STATUS / TC # */}
+                      {/* 13. ACTIONABLE STATUS / WAITING STAGE */}
                       <td className="py-1 px-2.5 whitespace-nowrap border-r border-slate-200 h-8 align-middle">
-                        <div className="flex items-center gap-1 leading-none">
-                          <span className="text-[11px] font-bold text-slate-800 font-sans">
-                            {computeAutomatedTcStatus(pi)}
-                          </span>
-                          {pi.tcNumber && (
-                            <span className="text-[10px] font-mono text-blue-700 bg-blue-50 px-1 py-0.2 rounded-xs">
-                              #{pi.tcNumber}
-                            </span>
-                          )}
-                        </div>
+                        {(() => {
+                          const actionable = computeActionableWaitingStatus(pi);
+                          return (
+                            <div className="flex items-center gap-1.5 leading-none" title={actionable.actionText}>
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-xs font-sans font-bold text-[11px] border shadow-2xs ${actionable.badgeBg} ${actionable.badgeText} ${actionable.badgeBorder}`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${actionable.dotColor} shrink-0`} />
+                                <span>{actionable.statusLabel}</span>
+                              </span>
+                              {pi.tcNumber && !actionable.statusLabel.includes(pi.tcNumber) && (
+                                <span className="text-[10px] font-mono text-blue-700 bg-blue-50 px-1 py-0.2 rounded-xs border border-blue-200">
+                                  #{pi.tcNumber}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );

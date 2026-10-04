@@ -223,6 +223,168 @@ export function computeAutomatedTcStatus(item: Partial<PIData>): TCStatus {
   return 'Not Requested';
 }
 
+export interface ActionableStatusInfo {
+  statusLabel: string;
+  stageCode: 'S0' | 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'DONE';
+  stageName: string;
+  actionText: string;
+  badgeBg: string;
+  badgeText: string;
+  badgeBorder: string;
+  dotColor: string;
+  isCompleted: boolean;
+  isOverdue: boolean;
+  daysWaiting: number | null;
+}
+
+function getDaysToNow(dateStr?: string): number | null {
+  if (!dateStr || !dateStr.trim()) return null;
+  const start = new Date(dateStr.trim().replace(/\//g, '-'));
+  if (isNaN(start.getTime())) return null;
+  const now = new Date();
+  const diffTime = now.getTime() - start.getTime();
+  const days = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  return Math.max(0, days);
+}
+
+/**
+ * Computes the exact operational step this PI is waiting for right now.
+ */
+export function computeActionableWaitingStatus(item: Partial<PIData>): ActionableStatusInfo {
+  const hasFinalRec = !!(item.finalTcReceivedDate && item.finalTcReceivedDate.trim());
+  if (hasFinalRec) {
+    return {
+      statusLabel: item.tcNumber ? `Final TC Issued (#${item.tcNumber})` : 'Final TC Completed',
+      stageCode: 'DONE',
+      stageName: 'Completed',
+      actionText: 'Transaction Certificate Successfully Issued',
+      badgeBg: 'bg-emerald-50',
+      badgeText: 'text-emerald-800',
+      badgeBorder: 'border-emerald-300',
+      dotColor: 'bg-emerald-600',
+      isCompleted: true,
+      isOverdue: false,
+      daysWaiting: null,
+    };
+  }
+
+  const hasReq = !!(item.tcRequestDate && item.tcRequestDate.trim());
+  const hasCommDoc = !!(item.receivedCommercialDocDate && item.receivedCommercialDocDate.trim());
+  const hasDraftTc = !!(item.draftTcDate && item.draftTcDate.trim());
+  const hasDraftConf = !!(item.draftConfirmationDate && item.draftConfirmationDate.trim());
+  const hasFinalApply = !!(item.finalTcApplyDate && item.finalTcApplyDate.trim());
+
+  // Stage 0: Not Requested
+  if (!hasReq) {
+    return {
+      statusLabel: 'Waiting for TC Request',
+      stageCode: 'S0',
+      stageName: 'Initial Request',
+      actionText: 'Pending TC Request Submission to Factory',
+      badgeBg: 'bg-slate-100',
+      badgeText: 'text-slate-600',
+      badgeBorder: 'border-slate-300',
+      dotColor: 'bg-slate-400',
+      isCompleted: false,
+      isOverdue: false,
+      daysWaiting: null,
+    };
+  }
+
+  // Stage 1: Waiting for Commercial Document
+  if (!hasCommDoc) {
+    const days = getDaysToNow(item.tcRequestDate);
+    const isOver = days !== null && days > 4;
+    return {
+      statusLabel: days !== null ? `Waiting for Comm Doc (${days}d)` : 'Waiting for Comm Doc',
+      stageCode: 'S1',
+      stageName: 'Commercial Doc',
+      actionText: 'Waiting for Invoice / Shipping Documents from Factory',
+      badgeBg: isOver ? 'bg-red-50' : 'bg-amber-50',
+      badgeText: isOver ? 'text-red-800' : 'text-amber-800',
+      badgeBorder: isOver ? 'border-red-300' : 'border-amber-300',
+      dotColor: isOver ? 'bg-red-600' : 'bg-amber-600',
+      isCompleted: false,
+      isOverdue: isOver,
+      daysWaiting: days,
+    };
+  }
+
+  // Stage 2: Waiting for Draft TC from Certifier
+  if (!hasDraftTc) {
+    const days = getDaysToNow(item.receivedCommercialDocDate);
+    const isOver = days !== null && days > 5;
+    return {
+      statusLabel: days !== null ? `Waiting for Draft TC (${days}d)` : 'Waiting for Draft TC',
+      stageCode: 'S2',
+      stageName: 'Draft TC',
+      actionText: 'Waiting for Draft TC from Certification Body',
+      badgeBg: isOver ? 'bg-red-50' : 'bg-blue-50',
+      badgeText: isOver ? 'text-red-800' : 'text-blue-800',
+      badgeBorder: isOver ? 'border-red-300' : 'border-blue-300',
+      dotColor: isOver ? 'bg-red-600' : 'bg-blue-600',
+      isCompleted: false,
+      isOverdue: isOver,
+      daysWaiting: days,
+    };
+  }
+
+  // Stage 3: Waiting for Draft Confirmation
+  if (!hasDraftConf) {
+    const days = getDaysToNow(item.draftTcDate);
+    const isOver = days !== null && days > 3;
+    return {
+      statusLabel: days !== null ? `Waiting for Confirmation (${days}d)` : 'Waiting for Confirmation',
+      stageCode: 'S3',
+      stageName: 'Draft Confirmation',
+      actionText: 'Pending Buyer / Internal Draft Approval',
+      badgeBg: isOver ? 'bg-red-50' : 'bg-purple-50',
+      badgeText: isOver ? 'text-red-800' : 'text-purple-800',
+      badgeBorder: isOver ? 'border-red-300' : 'border-purple-300',
+      dotColor: isOver ? 'bg-red-600' : 'bg-purple-600',
+      isCompleted: false,
+      isOverdue: isOver,
+      daysWaiting: days,
+    };
+  }
+
+  // Stage 4: Waiting for Final TC Application
+  if (!hasFinalApply) {
+    const days = getDaysToNow(item.draftConfirmationDate);
+    const isOver = days !== null && days > 3;
+    return {
+      statusLabel: days !== null ? `Waiting for Final Apply (${days}d)` : 'Waiting for Final Apply',
+      stageCode: 'S4',
+      stageName: 'Final Application',
+      actionText: 'Pending Final Application Submission to Certifier',
+      badgeBg: isOver ? 'bg-red-50' : 'bg-indigo-50',
+      badgeText: isOver ? 'text-red-800' : 'text-indigo-800',
+      badgeBorder: isOver ? 'border-red-300' : 'border-indigo-300',
+      dotColor: isOver ? 'bg-red-600' : 'bg-indigo-600',
+      isCompleted: false,
+      isOverdue: isOver,
+      daysWaiting: days,
+    };
+  }
+
+  // Stage 5: Waiting for Final TC Certificate Release
+  const days = getDaysToNow(item.finalTcApplyDate);
+  const isOver = days !== null && days > 5;
+  return {
+    statusLabel: days !== null ? `Waiting for Final Release (${days}d)` : 'Waiting for Final Release',
+    stageCode: 'S5',
+    stageName: 'Final TC Release',
+    actionText: 'Waiting for Final Certificate from Certification Body',
+    badgeBg: isOver ? 'bg-red-50' : 'bg-teal-50',
+    badgeText: isOver ? 'text-red-800' : 'text-teal-800',
+    badgeBorder: isOver ? 'border-red-300' : 'border-teal-300',
+    dotColor: isOver ? 'bg-red-600' : 'bg-teal-600',
+    isCompleted: false,
+    isOverdue: isOver,
+    daysWaiting: days,
+  };
+}
+
 export interface FilterState {
   dateRange: string; // 'all' | '30days' | '60days' | '90days' | 'ytd' | 'custom'
   customer: string;

@@ -14,6 +14,7 @@ import { DocumentsView } from './components/DocumentsView';
 import { CommercialFollowUpView } from './components/CommercialFollowUpView';
 import { TcLeadTimeView } from './components/TcLeadTimeView';
 import { ExcelUploadView } from './components/ExcelUploadView';
+import { CommercialDocReaderView } from './components/CommercialDocReaderView';
 import { GoogleSheetsSyncModal } from './components/GoogleSheetsSyncModal';
 import {
   loadFromPersistentStorage,
@@ -638,7 +639,9 @@ export default function App() {
 
         <main className="flex-1 p-2 sm:p-2.5 lg:p-3 space-y-2 w-full min-w-0">
           {/* View Routing */}
-          {activeTab === 'Excel Upload' ? (
+          {activeTab === 'Commercial Doc Reader' ? (
+            <CommercialDocReaderView />
+          ) : activeTab === 'Excel Upload' ? (
             <ExcelUploadView
               currentData={piList}
               activeFileInfo={activeFileInfo}

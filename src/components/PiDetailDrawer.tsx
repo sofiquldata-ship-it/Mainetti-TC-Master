@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PIData, TCStatus, computeAutomatedTcStatus } from '../types/tc';
+import { PIData, TCStatus, computeAutomatedTcStatus, computeActionableWaitingStatus } from '../types/tc';
 import {
   X,
   Building2,
@@ -184,20 +184,40 @@ export const PiDetailDrawer: React.FC<PiDetailDrawerProps> = ({
             </div>
           )}
 
-          {/* Current Automated Status Bar */}
-          <div className="p-3 bg-slate-900 text-white rounded-sm shadow-xs flex items-center justify-between">
-            <div>
-              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block">
-                Automatic Current TC Status
-              </span>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-sm font-bold font-mono text-white tracking-tight">
-                  {activeStatus}
-                </span>
+          {/* Current Automated Status Bar with Actionable Waiting Step */}
+          {(() => {
+            const actionable = computeActionableWaitingStatus({
+              ...pi,
+              tcRequestDate: tcReqDate || undefined,
+              receivedCommercialDocDate: recCommDocDate || undefined,
+              draftTcDate: draftTcDate || undefined,
+              draftConfirmationDate: draftConfDate || undefined,
+              revisionQty: revQty ? Number(revQty) : undefined,
+              finalTcApplyDate: finalApplyDate || undefined,
+              finalTcReceivedDate: finalRecDate || undefined,
+              tcNumber: tcNum || undefined,
+            });
+            return (
+              <div className="p-3 bg-[#0b1b3d] text-white rounded-sm shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 border border-[#1a386b]">
+                <div>
+                  <span className="text-[10px] text-blue-200 font-bold uppercase tracking-wider block font-mono">
+                    Current Process Status (Waiting For):
+                  </span>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`w-2.5 h-2.5 rounded-full ${actionable.dotColor} ${actionable.isCompleted ? '' : 'animate-pulse'}`} />
+                    <span className="text-sm font-bold font-mono text-white tracking-tight">
+                      {actionable.statusLabel}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-[11px] font-sans text-blue-100 bg-white/10 px-2 py-1 rounded-xs border border-white/20 inline-block">
+                    {actionable.actionText}
+                  </span>
+                </div>
               </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Stepper Progression Visualizer */}
           <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-sm">
