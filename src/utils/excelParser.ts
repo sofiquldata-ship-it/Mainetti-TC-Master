@@ -92,7 +92,7 @@ function mapToDeliveryStatus(value: any): DeliveryStatus {
   return 'Pending Dispatch';
 }
 
-// Keywords to check for TRANSACTION CERTIFICATE COST in Model or Description
+// Keywords to check for TRANSACTION CERTIFICATE COST specifically
 function isTcCostLine(modelVal: any, descVal: any, allRowText?: string): boolean {
   const normModel = normalizeStr(modelVal);
   const normDesc = normalizeStr(descVal);
@@ -112,7 +112,6 @@ function isTcCostLine(modelVal: any, descVal: any, allRowText?: string): boolean
     return true;
   }
 
-  // Check if phrase "TRANSACTION CERTIFICATE COST" appears in any form
   if (
     (normModel.includes('transaction') && normModel.includes('certificate')) ||
     (normDesc.includes('transaction') && normDesc.includes('certificate'))
@@ -121,6 +120,68 @@ function isTcCostLine(modelVal: any, descVal: any, allRowText?: string): boolean
   }
 
   if (normAll && targets.some((t) => normAll.includes(t))) {
+    return true;
+  }
+
+  return false;
+}
+
+// Keywords to check for ANY non-product charge/service lines (Transportation Cost, Documentation Charge, etc.)
+export function isNonProductChargeLine(val1: any, val2?: any, allText?: string): boolean {
+  const combined = `${String(val1 || '')} ${String(val2 || '')} ${String(allText || '')}`.toLowerCase();
+  const s = combined.replace(/[^a-z0-9]/g, '');
+  if (!s) return false;
+
+  const targets = [
+    'transportationcost',
+    'transportationcharge',
+    'transportcost',
+    'transportcharge',
+    'freightcost',
+    'freightcharge',
+    'carriagecost',
+    'carriagecharge',
+    'documentationcharge',
+    'documentationcost',
+    'documentationfee',
+    'doccharge',
+    'doccost',
+    'docfee',
+    'documentcharge',
+    'documentcost',
+    'documentfee',
+    'transactioncertificatecost',
+    'transactioncertificatecharge',
+    'transactioncertificate',
+    'tccost',
+    'tccharge',
+    'tcfee',
+    'samplecharge',
+    'samplecost',
+    'developmentcharge',
+    'developmentcost',
+    'handlingcharge',
+    'handlingfee',
+    'couriercharge',
+    'couriercost',
+    'postagecharge',
+    'bankcharge',
+    'inspectioncharge',
+    'testingcharge',
+  ];
+
+  if (targets.some((t) => s.includes(t))) {
+    return true;
+  }
+
+  if (
+    (s.includes('transportation') && (s.includes('cost') || s.includes('charge') || s.includes('fee'))) ||
+    (s.includes('transport') && (s.includes('cost') || s.includes('charge') || s.includes('fee'))) ||
+    (s.includes('documentation') && (s.includes('cost') || s.includes('charge') || s.includes('fee'))) ||
+    (s.includes('document') && (s.includes('charge') || s.includes('cost') || s.includes('fee'))) ||
+    (s.includes('transaction') && s.includes('certificate')) ||
+    (s.includes('freight') && (s.includes('cost') || s.includes('charge') || s.includes('fee')))
+  ) {
     return true;
   }
 
@@ -282,12 +343,20 @@ export async function parseExcelFile(
   const orderQtyCol = findColIndex([
     'order quantity',
     'order qty',
+    'ordered quantity',
     'ordered qty',
-    'order pcs',
-    'pi qty',
+    'total order quantity',
+    'total order qty',
     'pi quantity',
+    'pi qty',
+    'order pcs',
     'total qty',
     'total quantity',
+    'quantity (pcs)',
+    'qty (pcs)',
+    'quantity(pcs)',
+    'qty(pcs)',
+    'item qty',
     'quantity',
     'qty',
     'pcs',
@@ -528,10 +597,9 @@ export async function parseExcelFile(
     const rawRowDelivQ = delivQtyCol !== -1 ? parseNumericCost(rowArray[delivQtyCol]) : 0;
     const rawRowBalQ = balQtyCol !== -1 ? parseNumericCost(rowArray[balQtyCol]) : 0;
 
-    // USER DIRECTIVE: In Excel, if any row has quantity 1 (or <= 1), convert that value to 0 BEFORE summing
-    const parsedOrderQ = rawRowOrderQ <= 1 ? 0 : rawRowOrderQ;
-    const parsedDelivQ = rawRowDelivQ <= 1 ? 0 : rawRowDelivQ;
-    const parsedBalQ = rawRowBalQ <= 1 ? 0 : rawRowBalQ;
+    const parsedOrderQ = rawRowOrderQ;
+    const parsedDelivQ = rawRowDelivQ;
+    const parsedBalQ = rawRowBalQ;
 
     const invNum = invoiceNumberCol !== -1 && rowArray[invoiceNumberCol] ? String(rowArray[invoiceNumberCol]).trim() : undefined;
     const invDate = invoiceDateCol !== -1 && rowArray[invoiceDateCol] ? parseDateValue(rowArray[invoiceDateCol]) : undefined;
@@ -587,21 +655,26 @@ export async function parseExcelFile(
     if (tcNum && !group.tcNumber) group.tcNumber = tcNum;
     if (invNum && !group.invoiceNumber) group.invoiceNumber = invNum;
 
-    // Sum Deliverd Qty from this row whenever present
-    if (parsedDelivQ > 0) {
-      group.productDelivQtySum += parsedDelivQ;
-    }
-
     // If buyer/customer wasn't filled on initial line, update from valid line
     if (group.buyer === 'Global Buyer' && buyer !== 'Global Buyer') group.buyer = buyer;
     if (group.customer === 'Partner Garment Factory' && customer !== 'Partner Garment Factory') group.customer = customer;
 
+    const isThisRowNonProduct = isNonProductChargeLine(modelVal, descVal, rowText);
+
     if (isThisRowTcCost) {
       group.hasExplicitTcCostLine = true;
       group.tcCostSum += rowAmount > 0 ? rowAmount : 250; // default standard TC cost if blank
+    } else if (isThisRowNonProduct) {
+      // Non-product fee/charge line (e.g. Transportation Cost, Documentation Charge, etc.)
+      // Strictly do NOT sum into physical product quantities!
     } else {
-      // Non-TC product item line -> Sum product order quantity!
-      if (parsedOrderQ > 0) group.productOrderQtySum += parsedOrderQ;
+      // Genuine physical product item line -> Sum product order quantity!
+      if (parsedOrderQ > 1) {
+        group.productOrderQtySum += parsedOrderQ;
+      } else if (parsedOrderQ > 0 && !group.hasExplicitTcCostLine) {
+        group.productOrderQtySum += parsedOrderQ;
+      }
+      if (parsedDelivQ > 0) group.productDelivQtySum += parsedDelivQ;
       if (parsedBalQ > 0) group.productBalQtySum += parsedBalQ;
     }
 
@@ -629,32 +702,15 @@ export async function parseExcelFile(
     // CRITICAL REQUIREMENT:
     // Keep ONLY PIs that have TRANSACTION CERTIFICATE COST added!
     if (group.hasExplicitTcCostLine && group.tcCostSum > 0) {
-      // Sum other product lines for Order Quantity. If it is 1 or <= 1, replace with 0!
       let finalOrderQ = group.productOrderQtySum;
-      if (finalOrderQ <= 1) {
-        finalOrderQ = 0;
-      }
-
       let finalDelivQ = group.productDelivQtySum;
-      if (finalDelivQ <= 1 && finalOrderQ === 0) {
-        finalDelivQ = 0;
-      }
 
       // If delivery quantity was found in Deliverd Qty column and order qty was blank, equate them
       if (finalOrderQ === 0 && finalDelivQ > 0) {
         finalOrderQ = finalDelivQ;
       }
 
-      // If balance is 1 (e.g. 351 - 350 = 1 due to 1-qty TC line), subtract 1 from order quantity
-      if (finalOrderQ > 0 && finalOrderQ - finalDelivQ === 1) {
-        finalOrderQ = finalOrderQ - 1;
-      }
-
       let finalBalQ = Math.max(0, finalOrderQ - finalDelivQ);
-      if (finalBalQ === 1) {
-        finalOrderQ = Math.max(0, finalOrderQ - 1);
-        finalBalQ = 0;
-      }
 
       const autoStatus = computeAutomatedTcStatus({
         tcRequestDate: group.tcRequestDate,
@@ -685,20 +741,23 @@ export async function parseExcelFile(
         }
       }
 
-      // Extract all genuine product rows (excluding TRANSACTION CERTIFICATE COST)
+      // Extract all genuine product rows (excluding TRANSACTION CERTIFICATE COST and lines where order quantity <= 1)
       const extractedProductItems: any[] = [];
       group.allLines.forEach((rowArr: any, lineIdx: number) => {
         const mVal = modelCol !== -1 && rowArr[modelCol] !== undefined ? String(rowArr[modelCol]).trim() : '';
         const dVal = descCol !== -1 && rowArr[descCol] !== undefined ? String(rowArr[descCol]).trim() : '';
-        const rTxt = rowArr.map((c: any) => String(c || '').trim()).join(' ');
-
-        // STRICT USER DIRECTIVE: Exclude the Transaction Certificate Cost line completely!
-        if (isTcCostLine(mVal, dVal, rTxt)) {
-          return;
-        }
-
         const rowStyle = styleCol !== -1 && rowArr[styleCol] ? String(rowArr[styleCol]).trim() : '';
         const rowPO = poRefCol !== -1 && rowArr[poRefCol] ? String(rowArr[poRefCol]).trim() : '';
+        const rTxt = rowArr.map((c: any) => String(c || '').trim()).join(' ');
+
+        // STRICT USER DIRECTIVE: Exclude all service charges, Transportation Cost, Documentation Charge, TC Cost, etc.!
+        if (
+          isTcCostLine(mVal, dVal, rTxt) ||
+          isNonProductChargeLine(mVal, dVal, rTxt) ||
+          isNonProductChargeLine(rowStyle)
+        ) {
+          return;
+        }
         const rowWidth = widthCol !== -1 && rowArr[widthCol] ? String(rowArr[widthCol]).trim() : '';
         const rowLength = lengthCol !== -1 && rowArr[lengthCol] ? String(rowArr[lengthCol]).trim() : '';
         const rowGusset = gussetCol !== -1 && rowArr[gussetCol] ? String(rowArr[gussetCol]).trim() : '';
@@ -708,50 +767,55 @@ export async function parseExcelFile(
         const rowDeliv = delivQtyCol !== -1 ? parseNumericCost(rowArr[delivQtyCol]) : 0;
         const rowBal = balQtyCol !== -1 ? parseNumericCost(rowArr[balQtyCol]) : 0;
 
+        // USER DIRECTIVE: If order quantity is 1 (or <= 1), remove/skip this entire line!
+        if (rowOrder <= 1) {
+          return;
+        }
+
         // Skip completely blank rows
         if (!mVal && !dVal && !rowStyle && rowOrder === 0 && rowDeliv === 0) {
           return;
         }
 
-        const validOrderQ = rowOrder <= 1 && rowDeliv > 1 ? rowDeliv : (rowOrder <= 1 ? 0 : rowOrder);
+        const validOrderQ = rowOrder;
         const validDelivQ = rowDeliv <= 1 && validOrderQ > 1 ? validOrderQ : (rowDeliv <= 1 ? 0 : rowDeliv);
         const validBalQ = rowBal > 0 ? rowBal : Math.max(0, validOrderQ - validDelivQ);
 
         const currentSl = extractedProductItems.length + 1;
-        const cleanStyle = rowStyle || (rowPO ? `PO ${rowPO}` : group.poReference || `Style ${currentSl}`);
-        const cleanModel = mVal || dVal || `PCKE1201${currentSl}A_V${((currentSl - 1) % 4) + 1}`;
+        const cleanStyle = rowStyle || (rowPO ? `PO ${rowPO}` : (group.poReference ? `PO ${group.poReference}` : `Item ${currentSl}`));
+        const cleanModel = mVal || dVal || (group.productDescription !== 'TRANSACTION CERTIFICATE COST' ? group.productDescription : 'POLYBAGS');
 
         extractedProductItems.push({
-          id: `${group.piNumber}-prod-${lineIdx}`,
+          id: `${group.piNumber}-prod-${lineIdx}-${currentSl}`,
           slNo: currentSl,
           styleNo: cleanStyle,
           modelProduct: cleanModel,
-          width: rowWidth || (170 + ((currentSl - 1) % 3) * 10),
-          length: rowLength || (210 + ((currentSl - 1) % 3) * 15),
-          gusset: rowGusset || 0,
-          flap: rowFlap || 23,
-          orderQty: validOrderQ || finalOrderQ,
-          deliveryQty: validDelivQ || finalDelivQ,
-          pktBox: rowPktBox || (extractedProductItems.length === 0 ? 69 : '-'),
+          width: rowWidth !== '' && rowWidth !== undefined ? rowWidth : '-',
+          length: rowLength !== '' && rowLength !== undefined ? rowLength : '-',
+          gusset: rowGusset !== '' && rowGusset !== undefined ? rowGusset : '-',
+          flap: rowFlap !== '' && rowFlap !== undefined ? rowFlap : '-',
+          orderQty: validOrderQ,
+          deliveryQty: validDelivQ > 0 ? validDelivQ : validOrderQ,
+          pktBox: rowPktBox !== '' && rowPktBox !== undefined ? rowPktBox : '-',
           balanceQty: validBalQ > 0 ? validBalQ : '-',
           piNumber: group.piNumber,
         });
       });
 
-      // Fallback: If no sub-rows were extracted, generate a clean product line matching the PI
+      // Fallback: If no sub-rows were extracted, generate 1 clean product line matching the PI
       if (extractedProductItems.length === 0 && (finalOrderQ > 0 || finalDelivQ > 0)) {
         extractedProductItems.push({
           id: `${group.piNumber}-default-prod-1`,
           slNo: 1,
-          styleNo: group.poReference ? `PO ${group.poReference}` : 'POLYBAGS 10PK CORE BRIEF',
-          modelProduct: 'PCKE12010A_V1',
-          width: 170,
-          length: 210,
-          gusset: 0,
-          flap: 23,
+          styleNo: group.poReference ? `PO ${group.poReference}` : 'POLYBAGS',
+          modelProduct: group.productDescription !== 'TRANSACTION CERTIFICATE COST' ? group.productDescription : 'POLYBAGS',
+          width: '-',
+          length: '-',
+          gusset: '-',
+          flap: '-',
           orderQty: finalOrderQ,
           deliveryQty: finalDelivQ,
-          pktBox: 69,
+          pktBox: '-',
           balanceQty: finalBalQ > 0 ? finalBalQ : '-',
           piNumber: group.piNumber,
         });
@@ -801,6 +865,16 @@ export async function parseExcelFile(
 
   const totalCostUsd = validOrders.reduce((sum, item) => sum + item.tcCost, 0);
 
+  // Save the complete raw item-level table to browser storage
+  try {
+    const allExtractedItems = validOrders.flatMap((o) => o.productItems || []);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('mainetti_raw_product_items_table', JSON.stringify(allExtractedItems));
+    }
+  } catch (storageErr) {
+    console.warn('Failed to save raw product items table to localStorage:', storageErr);
+  }
+
   const fileInfo: UploadedFileInfo = {
     fileName: file.name,
     fileSize: file.size,
@@ -831,30 +905,13 @@ export function sanitizePidData(list: PIData[]): PIData[] {
   return list
     .filter((item) => !isCancelledOrder(item) && !isCancelledPi(item.piNumber))
     .map((item) => {
-    let rawOrderQ = item.orderQuantity ?? item.quantityPcs ?? 0;
-    let cleanOrderQ = rawOrderQ <= 1 ? 0 : rawOrderQ;
+    const rawOrderQ = item.orderQuantity ?? item.quantityPcs ?? 0;
     const rawDelivQ = item.deliveryQuantity ?? 0;
-    let cleanDelivQ =
-      cleanOrderQ === 0
-        ? 0
-        : rawDelivQ > 1
-        ? rawDelivQ
-        : item.deliveryStatus === 'Delivered'
-        ? cleanOrderQ
-        : item.deliveryStatus === 'In Transit'
-        ? Math.floor(cleanOrderQ * 0.8)
-        : 0;
-
-    // Rule: If Balance is 1, subtract 1 from Order Quantity
-    if (cleanOrderQ > 0 && cleanOrderQ - cleanDelivQ === 1) {
-      cleanOrderQ = cleanOrderQ - 1;
-    }
-
-    let cleanBalQ = Math.max(0, cleanOrderQ - cleanDelivQ);
-    if (cleanBalQ === 1) {
-      cleanOrderQ = Math.max(0, cleanOrderQ - 1);
-      cleanBalQ = 0;
-    }
+    const cleanOrderQ = rawOrderQ;
+    const cleanDelivQ = rawDelivQ;
+    const cleanBalQ = item.balanceQuantity !== undefined && item.balanceQuantity !== null
+      ? item.balanceQuantity
+      : Math.max(0, cleanOrderQ - cleanDelivQ);
 
     // Determine cleanDeliveryStatus strictly based on cleanBalQ and cleanDelivQ:
     let cleanDeliveryStatus: DeliveryStatus = item.deliveryStatus || 'Pending Dispatch';
@@ -891,6 +948,9 @@ export function sanitizePidData(list: PIData[]): PIData[] {
       orderQuantity: cleanOrderQ,
       deliveryQuantity: cleanDelivQ,
       balanceQuantity: cleanBalQ,
+      productItems: item.productItems
+        ? item.productItems.filter((p) => (Number(p.orderQty) || 0) > 1)
+        : undefined,
     };
   });
 }

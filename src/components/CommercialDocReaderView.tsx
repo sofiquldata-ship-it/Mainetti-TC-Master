@@ -3,6 +3,12 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import {
+  extractCommercialDocInfoFromWorkbook,
+  saveCommercialDocSync,
+  getCommercialDocSync,
+  CommercialDocSyncData,
+} from '../utils/commercialDocSync';
+import {
   FileSpreadsheet,
   UploadCloud,
   FileText,
@@ -223,6 +229,17 @@ export const CommercialDocReaderView: React.FC = () => {
             detectedCommercialFields,
           };
         });
+
+        // Smart extract and sync to Delivery Challan / Gate Pass
+        try {
+          const syncInfo = extractCommercialDocInfoFromWorkbook(parsedSheets);
+          saveCommercialDocSync({
+            ...syncInfo,
+            fileName: file.name,
+          });
+        } catch (syncErr) {
+          console.warn('Commercial Doc Sync extraction note:', syncErr);
+        }
 
         setSheets(parsedSheets);
         setActiveSheetIdx(0);

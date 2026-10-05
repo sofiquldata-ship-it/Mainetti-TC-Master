@@ -1,5 +1,10 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { PIData } from '../types/tc';
+import {
+  getCommercialDocSync,
+  saveCommercialDocSync,
+  CommercialDocSyncData,
+} from '../utils/commercialDocSync';
 import {
   FileText,
   Printer,
@@ -19,6 +24,8 @@ import {
   Edit3,
   ChevronRight,
   Sparkles,
+  PackageCheck,
+  MapPin,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -43,72 +50,181 @@ interface DocumentsViewProps {
   onSelectPI?: (pi: PIData) => void;
 }
 
-// Helper to check and filter out TC Cost line
-function isTcCostText(val: any): boolean {
-  if (!val) return false;
-  const s = String(val).toLowerCase().replace(/[^a-z0-9]/g, '');
-  return (
-    s.includes('transactioncertificate') ||
-    s.includes('tccost') ||
-    s.includes('tcharge') ||
-    s.includes('transactioncert') ||
-    (s.includes('transaction') && s.includes('certificate'))
-  );
+// Helper to check and filter out any service/cost/charge lines (TC Cost, Transportation Cost, Documentation Charge, etc.)
+function isNonProductChargeLine(val1: any, val2?: any, allText?: string): boolean {
+  const combined = `${String(val1 || '')} ${String(val2 || '')} ${String(allText || '')}`.toLowerCase();
+  const s = combined.replace(/[^a-z0-9]/g, '');
+  if (!s) return false;
+
+  const targets = [
+    'transportationcost',
+    'transportationcharge',
+    'transportcost',
+    'transportcharge',
+    'freightcost',
+    'freightcharge',
+    'carriagecost',
+    'carriagecharge',
+    'documentationcharge',
+    'documentationcost',
+    'documentationfee',
+    'doccharge',
+    'doccost',
+    'docfee',
+    'documentcharge',
+    'documentcost',
+    'documentfee',
+    'transactioncertificatecost',
+    'transactioncertificatecharge',
+    'transactioncertificate',
+    'tccost',
+    'tccharge',
+    'tcfee',
+    'samplecharge',
+    'samplecost',
+    'developmentcharge',
+    'developmentcost',
+    'handlingcharge',
+    'handlingfee',
+    'couriercharge',
+    'couriercost',
+    'postagecharge',
+    'bankcharge',
+    'inspectioncharge',
+    'testingcharge',
+  ];
+
+  if (targets.some((t) => s.includes(t))) {
+    return true;
+  }
+
+  if (
+    (s.includes('transportation') && (s.includes('cost') || s.includes('charge') || s.includes('fee'))) ||
+    (s.includes('transport') && (s.includes('cost') || s.includes('charge') || s.includes('fee'))) ||
+    (s.includes('documentation') && (s.includes('cost') || s.includes('charge') || s.includes('fee'))) ||
+    (s.includes('document') && (s.includes('charge') || s.includes('cost') || s.includes('fee'))) ||
+    (s.includes('transaction') && s.includes('certificate')) ||
+    (s.includes('freight') && (s.includes('cost') || s.includes('charge') || s.includes('fee')))
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function extractProductItemsFromPis(pis: PIData[]): ChallanItem[] {
   const result: ChallanItem[] = [];
 
+  // Try reading global raw table from localStorage if available
+  let rawTableMap: Record<string, any[]> = {};
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const savedRaw = localStorage.getItem('mainetti_raw_product_items_table');
+      if (savedRaw) {
+        const parsed: any[] = JSON.parse(savedRaw);
+        parsed.forEach((it) => {
+          if (it.piNumber) {
+            const k = it.piNumber.trim().toUpperCase();
+            if (!rawTableMap[k]) rawTableMap[k] = [];
+            rawTableMap[k].push(it);
+          }
+        });
+      }
+    } catch {
+      // fallback to in-memory items
+    }
+  }
+
+  const syncData = getCommercialDocSync();
+
   pis.forEach((p) => {
-    // 1. If p.productItems exists, use all items that are NOT TC cost
-    if (p.productItems && p.productItems.length > 0) {
-      p.productItems.forEach((it) => {
-        if (isTcCostText(it.modelProduct) || isTcCostText(it.styleNo)) {
-          return; // Strictly skip TC Cost line!
+    const normPi = p.piNumber ? p.piNumber.trim().toUpperCase() : '';
+    const itemsFromTable = (rawTableMap[normPi] && rawTableMap[normPi].length > 0)
+      ? rawTableMap[normPi]
+      : (p.productItems && p.productItems.length > 0 ? p.productItems : null);
+
+    // 1. If detailed items exist in the raw table, use ALL items directly!
+    if (itemsFromTable && itemsFromTable.length > 0) {
+      itemsFromTable.forEach((it) => {
+        // STRICT USER RULE: Exclude all service charge lines (Transportation Cost, Documentation Charge, TC Cost, etc.)
+        if (
+          isNonProductChargeLine(it.modelProduct) ||
+          isNonProductChargeLine(it.styleNo)
+        ) {
+          return;
         }
+        const oQty = Number(it.orderQty) || 0;
+        // STRICT USER RULE: If order quantity is 1 or less, remove this line completely!
+        if (oQty <= 1) {
+          return;
+        }
+
         const sl = result.length + 1;
+        let resolvedPktBox: string | number = it.pktBox !== undefined && it.pktBox !== '' && it.pktBox !== '-' ? it.pktBox : '-';
+
+        // Check if Packing List / Commercial Doc Reader has specific packet counts
+        if (resolvedPktBox === '-' && syncData?.pktBoxByStyleOrSl) {
+          const styleKey = (it.styleNo || '').trim().toUpperCase();
+          const modelKey = (it.modelProduct || '').trim().toUpperCase();
+          if (syncData.pktBoxByStyleOrSl[styleKey] !== undefined) {
+            resolvedPktBox = syncData.pktBoxByStyleOrSl[styleKey];
+          } else if (syncData.pktBoxByStyleOrSl[modelKey] !== undefined) {
+            resolvedPktBox = syncData.pktBoxByStyleOrSl[modelKey];
+          } else if (syncData.pktBoxByStyleOrSl[`SL_${sl}`] !== undefined) {
+            resolvedPktBox = syncData.pktBoxByStyleOrSl[`SL_${sl}`];
+          }
+        }
+
         result.push({
           id: `item-${p.id}-${it.id || sl}`,
           slNo: sl,
-          styleNo: it.styleNo || (p.poReference ? `PO ${p.poReference}` : `Style ${sl}`),
-          modelProduct: it.modelProduct || `PCKE1201${sl}A_V${((sl - 1) % 4) + 1}`,
-          width: it.width ?? 170 + (((sl - 1) % 3) * 10),
-          length: it.length ?? 210 + (((sl - 1) % 3) * 15),
-          gusset: it.gusset ?? 0,
-          flap: it.flap ?? 23,
-          orderQty: it.orderQty || p.orderQuantity || p.quantityPcs || 0,
-          deliveryQty: it.deliveryQty || p.deliveryQuantity || p.orderQuantity || 0,
-          pktBox: it.pktBox || (result.length === 0 ? 69 : '-'),
-          balanceQty: it.balanceQty ?? '-',
+          styleNo: it.styleNo || (p.poReference ? `PO ${p.poReference}` : '-'),
+          modelProduct: it.modelProduct || p.productDescription || 'POLYBAGS',
+          width: it.width !== undefined && it.width !== '' ? it.width : '-',
+          length: it.length !== undefined && it.length !== '' ? it.length : '-',
+          gusset: it.gusset !== undefined && it.gusset !== '' ? it.gusset : '-',
+          flap: it.flap !== undefined && it.flap !== '' ? it.flap : '-',
+          orderQty: oQty,
+          deliveryQty: it.deliveryQty || p.deliveryQuantity || oQty,
+          pktBox: resolvedPktBox,
+          balanceQty: it.balanceQty !== undefined && it.balanceQty !== '' ? it.balanceQty : '-',
         });
       });
     } else {
-      // 2. Otherwise generate clean product row for this PI (strictly avoiding TC cost text)
-      const orderQ = p.orderQuantity ?? p.quantityPcs ?? 15000;
+      // 2. Otherwise generate clean product row for this PI
+      const orderQ = p.orderQuantity ?? p.quantityPcs ?? 0;
+      if (orderQ <= 1) {
+        return; // Skip if order qty is 1 or less
+      }
+      const cleanDesc = isNonProductChargeLine(p.productDescription)
+        ? 'POLYBAGS'
+        : (p.productDescription || 'POLYBAGS');
+
       const delivQ = p.deliveryQuantity && p.deliveryQuantity > 0 ? p.deliveryQuantity : orderQ;
       const bal = Math.max(0, orderQ - delivQ);
       const sl = result.length + 1;
 
-      const cleanDesc = isTcCostText(p.productDescription)
-        ? `PCKE1201${sl}A_V${((sl - 1) % 4) + 1}`
-        : (p.productDescription || `PCKE1201${sl}A`);
-
       const styleRef = p.poReference
-        ? `PO ${p.poReference}, ${p.customer ? p.customer.slice(0, 4) : 'LIDA'}-PBG26020022 WO# WO-01070679`
-        : `Acc Serial No: ${p.customer ? p.customer.slice(0, 4) : 'LIDA'}-PBG-${p.piNumber.replace(/\D/g, '').slice(-8)}, PO# 1274223, 10PK CORE BRIEF`;
+        ? `PO ${p.poReference}`
+        : `Style ${sl}`;
+
+      let resolvedPktBox: string | number = '-';
+      if (syncData?.pktBoxByStyleOrSl && syncData.pktBoxByStyleOrSl[`SL_${sl}`] !== undefined) {
+        resolvedPktBox = syncData.pktBoxByStyleOrSl[`SL_${sl}`];
+      }
 
       result.push({
         id: `item-${p.id}-${sl}`,
         slNo: sl,
         styleNo: styleRef,
         modelProduct: cleanDesc,
-        width: 170 + (((sl - 1) % 3) * 10),
-        length: 210 + (((sl - 1) % 3) * 15),
-        gusset: 0,
-        flap: 23,
+        width: '-',
+        length: '-',
+        gusset: '-',
+        flap: '-',
         orderQty: orderQ,
         deliveryQty: delivQ,
-        pktBox: result.length === 0 ? 69 : '-',
+        pktBox: resolvedPktBox,
         balanceQty: bal === 0 ? '-' : bal,
       });
     }
@@ -190,14 +306,22 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
   const [deliveryVanNo, setDeliveryVanNo] = useState('');
   
   // Addresses State
-  const [invoiceToCompany, setInvoiceToCompany] = useState('LIDA TEXTILE AND DYEING LIMITED');
-  const [invoiceToAddress, setInvoiceToAddress] = useState(
-    'HOLDING-100/2, BLOCK-B, EAST CHANDORA, WARD-8, SOFIPUR, KALIAKOIR, BD-CGAZIPUR 1751, BANGLADESH'
-  );
-  const [deliverToCompany, setDeliverToCompany] = useState('LIDA TEXTILE AND DYEING LIMITED');
-  const [deliverToAddress, setDeliverToAddress] = useState(
-    'HOLDING-100/2, BLOCK-B, EAST CHANDORA, WARD-8, SOFIPUR, KALIAKOIR, BD-CGAZIPUR 1751, BANGLADESH'
-  );
+  const [invoiceToCompany, setInvoiceToCompany] = useState<string>(() => {
+    const sync = getCommercialDocSync();
+    return sync?.invoiceToCompany || 'LIDA TEXTILE AND DYEING LIMITED';
+  });
+  const [invoiceToAddress, setInvoiceToAddress] = useState<string>(() => {
+    const sync = getCommercialDocSync();
+    return sync?.invoiceToAddress || 'HOLDING-100/2, BLOCK-B, EAST CHANDORA, WARD-8, SOFIPUR, KALIAKOIR, BD-CGAZIPUR 1751, BANGLADESH';
+  });
+  const [deliverToCompany, setDeliverToCompany] = useState<string>(() => {
+    const sync = getCommercialDocSync();
+    return sync?.deliverToCompany || 'LIDA TEXTILE AND DYEING LIMITED';
+  });
+  const [deliverToAddress, setDeliverToAddress] = useState<string>(() => {
+    const sync = getCommercialDocSync();
+    return sync?.deliverToAddress || 'HOLDING-100/2, BLOCK-B, EAST CHANDORA, WARD-8, SOFIPUR, KALIAKOIR, BD-CGAZIPUR 1751, BANGLADESH';
+  });
 
   // Line items state
   const [items, setItems] = useState<ChallanItem[]>([]);
@@ -211,7 +335,14 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
 
     const first = selectedPis[0];
     if (first.buyer) setRetailer(first.buyer.toUpperCase());
-    if (first.customer) {
+
+    const sync = getCommercialDocSync();
+    if (sync?.invoiceToCompany) {
+      setInvoiceToCompany(sync.invoiceToCompany);
+      setInvoiceToAddress(sync.invoiceToAddress || invoiceToAddress);
+      setDeliverToCompany(sync.deliverToCompany || sync.invoiceToCompany);
+      setDeliverToAddress(sync.deliverToAddress || sync.invoiceToAddress || deliverToAddress);
+    } else if (first.customer) {
       setInvoiceToCompany(first.customer.toUpperCase());
       setDeliverToCompany(first.customer.toUpperCase());
     }
@@ -219,6 +350,18 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
     // Extract all products from the selected PIs (skipping TC Cost)
     const newItems = extractProductItemsFromPis(selectedPis);
     setItems(newItems);
+  };
+
+  const handleManualSyncCommercialDoc = () => {
+    const sync = getCommercialDocSync();
+    if (sync) {
+      if (sync.invoiceToCompany) setInvoiceToCompany(sync.invoiceToCompany);
+      if (sync.invoiceToAddress) setInvoiceToAddress(sync.invoiceToAddress);
+      if (sync.deliverToCompany) setDeliverToCompany(sync.deliverToCompany);
+      if (sync.deliverToAddress) setDeliverToAddress(sync.deliverToAddress);
+      const newItems = extractProductItemsFromPis(selectedPis);
+      setItems(newItems);
+    }
   };
 
   // Automatically update items whenever user checks/unchecks PIs
@@ -637,6 +780,22 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
 
             {/* Address Edit Inputs */}
             <div className="space-y-1.5 pt-1 border-t border-slate-100 text-xs">
+              <div className="flex items-center justify-between pb-1">
+                <span className="text-[10px] font-bold text-slate-700 uppercase flex items-center gap-1">
+                  <MapPin className="w-3 h-3 text-blue-600" />
+                  Address & Packing List
+                </span>
+                <button
+                  type="button"
+                  onClick={handleManualSyncCommercialDoc}
+                  className="flex items-center gap-1 text-[10px] font-semibold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-1.5 py-0.5 rounded-xs border border-blue-200 cursor-pointer"
+                  title="Pull latest Address and Packing List packets from Commercial Doc Reader"
+                >
+                  <RefreshCw className="w-2.5 h-2.5" />
+                  <span>Sync Commercial Doc</span>
+                </button>
+              </div>
+
               <div>
                 <label className="text-[10px] font-semibold text-slate-600 uppercase block mb-0.5">
                   Invoice To Company Name
