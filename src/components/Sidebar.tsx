@@ -12,6 +12,7 @@ import {
   PanelLeftClose,
   FileText,
   FileSpreadsheet,
+  FileCheck2,
 } from 'lucide-react';
 import { UploadedFileInfo } from '../types/tc';
 
@@ -22,6 +23,7 @@ interface SidebarProps {
   totalCount: number;
   overdueCount: number;
   pendingCount: number;
+  declarationCount?: number;
   activeFileInfo: UploadedFileInfo | null;
   onRefresh?: () => void;
   onExport?: () => void;
@@ -38,6 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   totalCount,
   overdueCount,
   pendingCount,
+  declarationCount = 0,
   activeFileInfo,
   onRefresh,
   onExport,
@@ -77,6 +80,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Executive Summary',
       icon: BarChart3,
       badge: null,
+    },
+    {
+      id: 'Declaration',
+      label: 'Declaration (90+ Days)',
+      icon: FileCheck2,
+      badge: declarationCount > 0 ? `${declarationCount}` : 'Letter',
+      badgeColor: declarationCount > 0
+        ? 'bg-amber-500/25 text-amber-300 border-amber-500/40 font-bold'
+        : 'bg-blue-500/20 text-blue-300 border-blue-500/30 font-semibold',
     },
     {
       id: 'Document',

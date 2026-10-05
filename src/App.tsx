@@ -15,6 +15,7 @@ import { CommercialFollowUpView } from './components/CommercialFollowUpView';
 import { TcLeadTimeView } from './components/TcLeadTimeView';
 import { ExcelUploadView } from './components/ExcelUploadView';
 import { CommercialDocReaderView } from './components/CommercialDocReaderView';
+import { DeclarationView } from './components/DeclarationView';
 import { GoogleSheetsSyncModal } from './components/GoogleSheetsSyncModal';
 import {
   loadFromPersistentStorage,
@@ -508,6 +509,27 @@ export default function App() {
     }
   };
 
+  // Calculate 90+ Days Overdue Orders for Declaration Letter
+  const declarationCount = useMemo(() => {
+    const today = new Date().getTime();
+    return piList.filter((item) => {
+      const autoSt = computeAutomatedTcStatus(item);
+      const effectiveSt = autoSt !== 'Not Requested' ? autoSt : (item.tcStatus || 'Not Requested');
+      const isFinalIssued =
+        effectiveSt === 'Final TC Received' ||
+        effectiveSt === 'Issued' ||
+        Boolean(item.finalTcReceivedDate);
+      if (isFinalIssued) return false;
+
+      // STRICT RULE: Only consider Invoice Date (not Order Date)
+      if (!item.invoiceDate) return false;
+      const dTime = new Date(item.invoiceDate).getTime();
+      if (isNaN(dTime)) return false;
+      const days = Math.floor((today - dTime) / (1000 * 60 * 60 * 24));
+      return days > 90;
+    }).length;
+  }, [piList]);
+
   // CSV Export utility
   const handleExportCSV = () => {
     if (filteredData.length === 0) return;
@@ -610,6 +632,7 @@ export default function App() {
         totalCount={piList.length}
         overdueCount={stats.overdue}
         pendingCount={stats.tcPending}
+        declarationCount={declarationCount}
         activeFileInfo={activeFileInfo}
         onRefresh={handleReloadData}
         onExport={handleExportCSV}
@@ -655,6 +678,13 @@ export default function App() {
               onSelectPI={(pi) => setSelectedPi(pi)}
               onSelectBuyer={(buyer) => handleFilterChange({ buyer })}
               onSelectCustomer={(customer) => handleFilterChange({ customer })}
+              onSaveToGoogleSheets={() => setIsGoogleSheetsModalOpen(true)}
+            />
+          ) : activeTab === 'Declaration' ? (
+            <DeclarationView
+              data={piList}
+              onSelectPI={(pi) => setSelectedPi(pi)}
+              onUpdatePI={handleUpdatePI}
               onSaveToGoogleSheets={() => setIsGoogleSheetsModalOpen(true)}
             />
           ) : activeTab === 'Document' || activeTab === 'Documents' ? (
