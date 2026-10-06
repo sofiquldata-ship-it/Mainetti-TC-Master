@@ -70,8 +70,11 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
     }
   };
 
-  // 1. Identify all 90+ Days Overdue PIs (Where Final TC is NOT issued & Days from Invoice Date > 90 strictly)
-  const overduePiList = useMemo(() => {
+  // Threshold state: '90' (90+ days / 90-179 days), '180' (180+ days), or 'all' (all 90+ days)
+  const [dayThreshold, setDayThreshold] = useState<'90' | '180' | 'all'>('90');
+
+  // Base list of all overdue orders (Where Final TC is NOT issued & Days from Invoice Date > 90 strictly)
+  const allOverdueList = useMemo(() => {
     return data
       .map((item) => {
         const autoStatus = computeAutomatedTcStatus(item);
@@ -92,18 +95,50 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
           invoiceDate,
           daysOver,
           is90DaysOver: !isFinalIssued && Boolean(invoiceDate) && daysOver > 90,
+          is180DaysOver: !isFinalIssued && Boolean(invoiceDate) && daysOver > 180,
         };
       })
       .filter((item) => item.is90DaysOver)
       .sort((a, b) => b.daysOver - a.daysOver);
   }, [data]);
 
-  // Selected PIs state (default: all overdue PIs selected)
+  // Specific 180+ Days list
+  const list180Days = useMemo(() => {
+    return allOverdueList.filter((item) => item.is180DaysOver);
+  }, [allOverdueList]);
+
+  // Specific 90-179 Days list
+  const list90To179Days = useMemo(() => {
+    return allOverdueList.filter((item) => !item.is180DaysOver);
+  }, [allOverdueList]);
+
+  // Active overdue list based on selected threshold
+  const overduePiList = useMemo(() => {
+    if (dayThreshold === '180') {
+      return list180Days;
+    }
+    return allOverdueList;
+  }, [allOverdueList, list180Days, dayThreshold]);
+
+  // Selected PIs state
   const [selectedPiIds, setSelectedPiIds] = useState<string[]>(() =>
     overduePiList.map((p) => p.id)
   );
 
-  // Sync selected IDs if overdue list changes and none was manually touched
+  // Auto-update selected PIs when switching threshold tab
+  const handleThresholdChange = (newThreshold: '90' | '180' | 'all') => {
+    setDayThreshold(newThreshold);
+    const targetList = newThreshold === '180' ? list180Days : allOverdueList;
+    setSelectedPiIds(targetList.map((p) => p.id));
+
+    if (newThreshold === '180') {
+      setSubjectText('Declaration letter to issue Transaction Certificate, 180 days over orders');
+    } else {
+      setSubjectText('Declaration letter to issue Transaction Certificate, 90 days over orders');
+    }
+  };
+
+  // Sync selected IDs if overdue list changes
   const selectedPIs = useMemo(() => {
     return overduePiList.filter((p) => selectedPiIds.includes(p.id));
   }, [overduePiList, selectedPiIds]);
@@ -321,10 +356,11 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
       pdf.text('Dear Sir/Madam,', leftMargin, currentY);
       currentY += 22;
 
-      // 5. Body Paragraph (Exact wording from original letter)
+      // 5. Body Paragraph (Exact wording with dynamic 90/180 days threshold)
+      const thresholdDaysNum = dayThreshold === '180' ? 180 : 90;
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(11);
-      const bodyParagraph = `With this letter, we would like to inform you that following PI No orders Transaction certificate is required which is 90 days over. Due to lack of system implementation didn’t apply for the Transaction certificate before 90 days. System implementation work in progress and expecting from ${targetImplementationDate} all the Transaction certificates will be applied before 90 days.`;
+      const bodyParagraph = `With this letter, we would like to inform you that following PI No orders Transaction certificate is required which is ${thresholdDaysNum} days over. Due to lack of system implementation didn’t apply for the Transaction certificate before ${thresholdDaysNum} days. System implementation work in progress and expecting from ${targetImplementationDate} all the Transaction certificates will be applied before ${thresholdDaysNum} days.`;
 
       const splitBody = pdf.splitTextToSize(bodyParagraph, contentWidth);
       pdf.text(splitBody, leftMargin, currentY, { lineHeightFactor: 1.35 });
@@ -401,7 +437,7 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
       pdf.setFontSize(11);
       pdf.text(companyName, leftMargin, currentY);
 
-      const fileName = `Declaration_Letter_90_Days_Over_${new Date().toISOString().slice(0, 10)}.pdf`;
+      const fileName = `Declaration_Letter_${thresholdDaysNum}_Days_Over_${new Date().toISOString().slice(0, 10)}.pdf`;
       pdf.save(fileName);
       setIsGeneratingPdf(false);
     } catch (err) {
@@ -425,14 +461,18 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-bold text-[#0b1b3d] uppercase tracking-wide">
-                Declaration Letter Generator (90+ Days Overdue Orders)
+                Declaration Letter Generator ({dayThreshold === '180' ? '180+ Days' : '90+ Days'} Overdue Orders)
               </h1>
-              <span className="text-[10px] bg-amber-100 text-amber-900 font-mono font-bold px-2 py-0.5 rounded-xs border border-amber-300">
-                Official TC Clearance
+              <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-xs border ${
+                dayThreshold === '180'
+                  ? 'bg-red-100 text-red-900 border-red-300'
+                  : 'bg-amber-100 text-amber-900 border-amber-300'
+              }`}>
+                {dayThreshold === '180' ? '180 Days Threshold' : '90 Days Threshold'}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Auto-filters orders without Final TC where Invoice Date is over 90 days & generates official declaration PDF
+              Auto-filters orders without Final TC where Invoice Date is over {dayThreshold === '180' ? '180' : '90'} days & generates official declaration letter
             </p>
           </div>
         </div>
@@ -465,30 +505,59 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
             onClick={handleDownloadPDF}
             disabled={isGeneratingPdf || selectedPIs.length === 0}
             className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white rounded-sm shadow-xs transition-all cursor-pointer disabled:opacity-50"
-            title="Download identical official PDF"
+            title={`Download official ${dayThreshold === '180' ? '180' : '90'} Days Declaration PDF`}
           >
             {isGeneratingPdf ? (
               <RefreshCw className="w-3.5 h-3.5 animate-spin" />
             ) : (
               <Download className="w-3.5 h-3.5" />
             )}
-            <span>Download Declaration PDF ({selectedPIs.length})</span>
+            <span>Download {dayThreshold === '180' ? '180D' : '90D'} PDF ({selectedPIs.length})</span>
           </button>
         </div>
       </div>
 
       {/* 2. KPI Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <div className="bg-white border border-slate-200 rounded-sm p-3 shadow-2xs">
+        <div
+          onClick={() => handleThresholdChange('90')}
+          className={`bg-white border rounded-sm p-3 shadow-2xs cursor-pointer transition-all ${
+            dayThreshold === '90'
+              ? 'border-amber-400 ring-2 ring-amber-400/20 bg-amber-50/20'
+              : 'border-slate-200 hover:border-slate-300'
+          }`}
+        >
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              90+ Days Overdue Orders
+            <span className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
+              90+ Days Overdue
             </span>
-            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            <Clock className="w-4 h-4 text-amber-500" />
           </div>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="text-xl font-bold font-mono text-slate-900">
-              {overduePiList.length}
+              {allOverdueList.length}
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">PI Orders</span>
+          </div>
+        </div>
+
+        <div
+          onClick={() => handleThresholdChange('180')}
+          className={`bg-white border rounded-sm p-3 shadow-2xs cursor-pointer transition-all ${
+            dayThreshold === '180'
+              ? 'border-red-500 ring-2 ring-red-500/20 bg-red-50/20'
+              : 'border-slate-200 hover:border-slate-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-red-700 uppercase tracking-wider flex items-center gap-1">
+              <span>180+ Days Critical</span>
+            </span>
+            <AlertTriangle className="w-4 h-4 text-red-500" />
+          </div>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className="text-xl font-bold font-mono text-red-700">
+              {list180Days.length}
             </span>
             <span className="text-[10px] text-slate-400 font-mono">PI Orders</span>
           </div>
@@ -497,7 +566,7 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
         <div className="bg-white border border-slate-200 rounded-sm p-3 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              Selected in Declaration
+              Selected in Letter ({dayThreshold === '180' ? '180D' : '90D'})
             </span>
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           </div>
@@ -506,23 +575,6 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
               {selectedPIs.length}
             </span>
             <span className="text-[10px] text-slate-400 font-mono">of {overduePiList.length} PIs</span>
-          </div>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-sm p-3 shadow-2xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              Total Order Quantity
-            </span>
-            <Layers className="w-4 h-4 text-blue-600" />
-          </div>
-          <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-xl font-bold font-mono text-[#0b1b3d]">
-              {selectedPIs
-                .reduce((sum, p) => sum + (p.orderQuantity || p.quantityPcs || 0), 0)
-                .toLocaleString()}
-            </span>
-            <span className="text-[10px] text-slate-400 font-mono">PCS</span>
           </div>
         </div>
 
@@ -548,7 +600,47 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
         <div className="lg:col-span-5 space-y-3">
           {/* Overdue Orders Picker */}
           <div className="bg-white border border-slate-200 rounded-sm shadow-2xs overflow-hidden flex flex-col">
-            <div className="p-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
+            {/* Mode Switcher Tabs for 90 Days vs 180 Days */}
+            <div className="p-2 border-b border-slate-200 bg-slate-100/90 flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => handleThresholdChange('90')}
+                className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-xs transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                  dayThreshold === '90'
+                    ? 'bg-[#0b1b3d] text-white shadow-xs'
+                    : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <Clock className={`w-3.5 h-3.5 ${dayThreshold === '90' ? 'text-amber-300' : 'text-amber-600'}`} />
+                <span>90 Days Over</span>
+                <span className={`px-1.5 py-0.2 text-[10px] font-mono rounded-xs font-bold ${
+                  dayThreshold === '90' ? 'bg-amber-400 text-slate-950' : 'bg-amber-100 text-amber-900'
+                }`}>
+                  {allOverdueList.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleThresholdChange('180')}
+                className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-xs transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                  dayThreshold === '180'
+                    ? 'bg-red-700 text-white shadow-xs'
+                    : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <AlertTriangle className={`w-3.5 h-3.5 ${dayThreshold === '180' ? 'text-white' : 'text-red-600'}`} />
+                <span>180 Days Over</span>
+                <span className={`px-1.5 py-0.2 text-[10px] font-mono rounded-xs font-bold ${
+                  dayThreshold === '180' ? 'bg-white text-red-900' : 'bg-red-100 text-red-900'
+                }`}>
+                  {list180Days.length}
+                </span>
+              </button>
+            </div>
+
+            {/* Search and Select Bar */}
+            <div className="p-2.5 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -582,14 +674,17 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
               {filteredOverdueList.length === 0 ? (
                 <div className="py-10 text-center text-slate-400 font-sans space-y-1">
                   <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto opacity-70" />
-                  <p className="font-semibold text-slate-700">No Orders Over 90 Days Pending TC</p>
+                  <p className="font-semibold text-slate-700">
+                    No Orders Over {dayThreshold === '180' ? '180' : '90'} Days Pending TC
+                  </p>
                   <p className="text-[11px] text-slate-400">
-                    All current active orders have received Final TC or are within 90 days.
+                    All current active orders have received Final TC or are within {dayThreshold === '180' ? '180' : '90'} days.
                   </p>
                 </div>
               ) : (
                 filteredOverdueList.map((pi) => {
                   const isChecked = selectedPiIds.includes(pi.id);
+                  const is180Plus = pi.daysOver > 180;
                   return (
                     <div
                       key={pi.id}
@@ -609,7 +704,11 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
                           <span className="font-mono font-bold text-xs text-[#0b1b3d] truncate">
                             {pi.piNumber}
                           </span>
-                          <span className="px-1.5 py-0.2 bg-red-100 text-red-800 font-mono text-[10px] font-bold rounded-xs shrink-0">
+                          <span className={`px-1.5 py-0.2 font-mono text-[10px] font-bold rounded-xs shrink-0 ${
+                            is180Plus
+                              ? 'bg-red-100 text-red-900 border border-red-300'
+                              : 'bg-amber-100 text-amber-900 border border-amber-300'
+                          }`}>
                             {pi.daysOver} Days Over
                           </span>
                         </div>
@@ -638,7 +737,7 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
               <button
                 type="button"
                 onClick={() => setSelectedPiIds(overduePiList.map((p) => p.id))}
-                className="text-blue-700 hover:underline font-semibold"
+                className="text-blue-700 hover:underline font-semibold cursor-pointer"
               >
                 Select All
               </button>
@@ -823,10 +922,10 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
               <p className="font-semibold text-slate-900">Dear Sir/Madam,</p>
               <p className="text-justify">
                 With this letter, we would like to inform you that following PI No orders Transaction
-                certificate is required which is 90 days over. Due to lack of system implementation didn’t
-                apply for the Transaction certificate before 90 days. System implementation work in progress
+                certificate is required which is {dayThreshold === '180' ? '180' : '90'} days over. Due to lack of system implementation didn’t
+                apply for the Transaction certificate before {dayThreshold === '180' ? '180' : '90'} days. System implementation work in progress
                 and expecting from {targetImplementationDate} all the Transaction certificates will be applied
-                before 90 days.
+                before {dayThreshold === '180' ? '180' : '90'} days.
               </p>
             </div>
 

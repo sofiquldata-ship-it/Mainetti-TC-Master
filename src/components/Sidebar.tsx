@@ -83,7 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'Declaration',
-      label: 'Declaration (90+ Days)',
+      label: 'Declaration (90 / 180 Days)',
       icon: FileCheck2,
       badge: declarationCount > 0 ? `${declarationCount}` : 'Letter',
       badgeColor: declarationCount > 0
