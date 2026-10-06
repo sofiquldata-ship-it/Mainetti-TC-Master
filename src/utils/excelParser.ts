@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { PIData, UploadedFileInfo, TCStatus, PaymentStatus, DeliveryStatus, computeAutomatedTcStatus, isCancelledStatus, isCancelledOrder, isCancelledPi } from '../types/tc';
+import { enrichPiListWithSavedChallanMap } from './deliveryReportParser';
 
 const STORAGE_KEY_DATA = 'MAINETTI_TC_DATA_V1';
 const STORAGE_KEY_FILE_INFO = 'MAINETTI_TC_FILE_INFO_V1';
@@ -902,7 +903,7 @@ export async function parseExcelFile(
 // and if Balance Quantity is 1, subtract 1 from Order Quantity so Balance becomes 0,
 // and strictly exclude any cancelled orders or PIs
 export function sanitizePidData(list: PIData[]): PIData[] {
-  return list
+  const sanitized = list
     .filter((item) => !isCancelledOrder(item) && !isCancelledPi(item.piNumber))
     .map((item) => {
     const rawOrderQ = item.orderQuantity ?? item.quantityPcs ?? 0;
@@ -953,6 +954,8 @@ export function sanitizePidData(list: PIData[]): PIData[] {
         : undefined,
     };
   });
+
+  return enrichPiListWithSavedChallanMap(sanitized);
 }
 
 import { savePIDataToFirestore } from './firestoreStorage';

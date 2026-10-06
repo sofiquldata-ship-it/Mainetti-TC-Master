@@ -336,6 +336,17 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
     const first = selectedPis[0];
     if (first.buyer) setRetailer(first.buyer.toUpperCase());
 
+    // Auto-pull PI-wise Last Delivery Challan Number from Delivery Report
+    if (first.lastChallanNumber) {
+      setChallanNumber(first.lastChallanNumber);
+    }
+    if (first.lastDeliveryDate) {
+      setDeliveryDate(first.lastDeliveryDate);
+    }
+    if (first.deliveryCount) {
+      setNoOfDelivery(`D-0${first.deliveryCount}`);
+    }
+
     const sync = getCommercialDocSync();
     if (sync?.invoiceToCompany) {
       setInvoiceToCompany(sync.invoiceToCompany);
@@ -670,9 +681,16 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
                             <Square className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           )}
                           <div className="truncate">
-                            <span className="font-mono font-bold text-slate-900 mr-1">
-                              {p.piNumber}
-                            </span>
+                            <div className="flex items-center gap-1.5 truncate">
+                              <span className="font-mono font-bold text-slate-900">
+                                {p.piNumber}
+                              </span>
+                              {p.lastChallanNumber && (
+                                <span className="text-[9px] font-mono bg-emerald-100 text-emerald-900 px-1 rounded-xs font-semibold">
+                                  #{p.lastChallanNumber}
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[11px] text-slate-500">
                               · {p.buyer} ({p.customer})
                             </span>

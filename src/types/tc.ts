@@ -75,6 +75,12 @@ export interface PIData {
   notes?: string;
   productItems?: PIProductItem[];
 
+  // Delivery Report / Challan Tracking Fields
+  lastChallanNumber?: string;
+  lastDeliveryDate?: string;
+  allChallanNumbers?: string[];
+  deliveryCount?: number;
+
   // New TC-Related Workflow Fields
   tcRequestDate?: string;
   receivedCommercialDocDate?: string;
@@ -423,5 +429,15 @@ export interface UploadedFileInfo {
   filteredOutZeroCostRows: number;
   totalCostUsd: number;
 }
+
+export interface DeliveryReportFileInfo {
+  fileName: string;
+  fileSize: number;
+  uploadDate: string;
+  totalRowsScanned: number;
+  totalPisWithChallan: number;
+  matchedDatabasePis: number;
+}
+
 
 

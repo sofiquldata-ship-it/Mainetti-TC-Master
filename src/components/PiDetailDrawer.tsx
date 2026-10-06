@@ -568,6 +568,11 @@ export const PiDetailDrawer: React.FC<PiDetailDrawerProps> = ({
               <span className="text-xs font-bold text-[#0b1b3d] uppercase tracking-wide block">
                 PI Quantities & Commercial Logistics
               </span>
+              {pi.lastChallanNumber && (
+                <span className="text-[11px] font-mono font-bold text-indigo-900 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-xs">
+                  Challan: {pi.lastChallanNumber}
+                </span>
+              )}
             </div>
 
             <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-xs border border-slate-200 font-mono text-xs">
@@ -594,6 +599,32 @@ export const PiDetailDrawer: React.FC<PiDetailDrawerProps> = ({
                 </strong>
               </div>
             </div>
+
+            {/* Delivery Challan Tracking Breakdown if present */}
+            {pi.lastChallanNumber && (
+              <div className="bg-indigo-50/50 border border-indigo-100 p-2.5 rounded-xs text-[11px] space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-indigo-950">Latest Delivery Challan:</span>
+                  <span className="font-mono font-bold text-indigo-900">{pi.lastChallanNumber}</span>
+                </div>
+                {pi.lastDeliveryDate && (
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span>Last Delivery Date:</span>
+                    <span className="font-mono">{pi.lastDeliveryDate}</span>
+                  </div>
+                )}
+                {pi.allChallanNumbers && pi.allChallanNumbers.length > 1 && (
+                  <div className="pt-1 border-t border-indigo-100 flex flex-wrap items-center gap-1">
+                    <span className="text-slate-500 text-[10px]">All Challans ({pi.allChallanNumbers.length}):</span>
+                    {pi.allChallanNumbers.map((ch, idx) => (
+                      <span key={idx} className="font-mono font-bold bg-white text-indigo-900 px-1.5 py-0.2 rounded-xs border border-indigo-200 text-[10px]">
+                        {ch}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

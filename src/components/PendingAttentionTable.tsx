@@ -41,6 +41,7 @@ type SortField =
   | 'piNumber'
   | 'invoiceNumber'
   | 'invoiceDate'
+  | 'lastChallanNumber'
   | 'buyer'
   | 'customer'
   | 'contactPerson'
@@ -195,6 +196,8 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
         (i) =>
           (i.piNumber && i.piNumber.toLowerCase().includes(q)) ||
           (i.invoiceNumber && i.invoiceNumber.toLowerCase().includes(q)) ||
+          (i.lastChallanNumber && i.lastChallanNumber.toLowerCase().includes(q)) ||
+          (i.allChallanNumbers && i.allChallanNumbers.some((c) => c.toLowerCase().includes(q))) ||
           (i.tcNumber && i.tcNumber.toLowerCase().includes(q)) ||
           (i.buyer && i.buyer.toLowerCase().includes(q)) ||
           (i.customer && i.customer.toLowerCase().includes(q)) ||
@@ -564,6 +567,18 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                 <div className="flex items-center gap-1">
                   <span>Invoice Date</span>
                   {renderSortIcon('invoiceDate')}
+                </div>
+              </th>
+
+              {/* 3.7. CHALLAN NO - FROZEN TOP */}
+              <th
+                onClick={() => handleSort('lastChallanNumber')}
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+                title="Delivery Challan Number from Delivery Report"
+              >
+                <div className="flex items-center gap-1">
+                  <span>Challan No</span>
+                  {renderSortIcon('lastChallanNumber')}
                 </div>
               </th>
 
@@ -943,6 +958,38 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                       )}
                     </td>
 
+                    {/* 3.7. CHALLAN NO */}
+                    <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-slate-100 font-mono">
+                      {pi.lastChallanNumber ? (
+                        <div className="flex items-center gap-1">
+                          <span
+                            className={`px-2 py-0.5 rounded-xs text-[10px] font-bold inline-block shadow-2xs ${
+                              isFinalReceived
+                                ? 'bg-emerald-50 border border-emerald-300 text-emerald-900'
+                                : 'bg-indigo-50 border border-indigo-200 text-indigo-900'
+                            }`}
+                            title={
+                              pi.allChallanNumbers && pi.allChallanNumbers.length > 1
+                                ? `All Delivery Challans (${pi.allChallanNumbers.length}): ${pi.allChallanNumbers.join(', ')}`
+                                : `Challan No: ${pi.lastChallanNumber}${pi.lastDeliveryDate ? ` (Date: ${pi.lastDeliveryDate})` : ''}`
+                            }
+                          >
+                            {pi.lastChallanNumber}
+                          </span>
+                          {pi.allChallanNumbers && pi.allChallanNumbers.length > 1 && (
+                            <span
+                              className="text-[9px] font-sans font-bold px-1 py-0.2 bg-slate-100 text-slate-600 rounded-xs border border-slate-200"
+                              title={`Total ${pi.allChallanNumbers.length} Challans: ${pi.allChallanNumbers.join(', ')}`}
+                            >
+                              +{pi.allChallanNumbers.length - 1}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-300 text-[10px] font-sans">-</span>
+                      )}
+                    </td>
+
                     {/* 4. BUYER */}
                     <td
                       className={`py-1.5 px-2.5 whitespace-nowrap border-r border-slate-100 ${
@@ -1155,42 +1202,38 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
             return (
               <tfoot className="bg-[#0b1b3d] text-white font-mono text-[10px] font-bold border-t-2 border-[#132c5e] sticky bottom-0 z-30 shadow-[0_-2px_6px_rgba(0,0,0,0.25)]">
                 <tr>
-                  <td colSpan={6} className="py-1.5 px-2.5 uppercase tracking-wider text-left border-r border-[#1a386b] sticky bottom-0 left-0 z-40 bg-[#0b1b3d] shadow-[2px_-2px_4px_rgba(0,0,0,0.25)]">
+                  <td colSpan={10} className="py-1.5 px-2.5 uppercase tracking-wider text-left border-r border-[#1a386b] sticky bottom-0 left-0 z-40 bg-[#0b1b3d] shadow-[2px_-2px_4px_rgba(0,0,0,0.25)]">
                     TOTAL SUMMARY ({filteredData.length} PIs)
                   </td>
-                  {/* 5. Total Order Quantity */}
+                  {/* Total Order Quantity */}
                   <td className="py-1.5 px-2.5 text-right tabular-nums text-white border-r border-[#1a386b]">
                     {totals.totalOrder.toLocaleString()}
                   </td>
-                  {/* 6. Total Delivery Quantity */}
+                  {/* Total Delivery Quantity */}
                   <td className="py-1.5 px-2.5 text-right tabular-nums text-emerald-300 border-r border-[#1a386b]">
                     {totals.totalDeliv.toLocaleString()}
                   </td>
-                  {/* 7. Total Balance Quantity */}
+                  {/* Total Balance Quantity */}
                   <td className="py-1.5 px-2.5 text-right tabular-nums text-amber-300 border-r border-[#1a386b]">
                     {totals.totalBal.toLocaleString()}
                   </td>
-                  {/* 8. Delivery Status */}
+                  {/* Delivery Status */}
                   <td className="py-1.5 px-2.5 border-r border-[#1a386b] text-center text-slate-400 font-sans text-[10px]">
                     -
                   </td>
-                  {/* 8.5. Invoice Number */}
-                  <td className="py-1.5 px-2.5 border-r border-[#1a386b] text-center text-slate-400 font-sans text-[10px]">
-                    -
-                  </td>
-                  {/* 9, 10, 11, 12 */}
+                  {/* 4 Workflow Stages */}
                   <td colSpan={4} className="py-1.5 px-2.5 border-r border-[#1a386b] text-center text-slate-400 font-sans text-[10px]">
                     Workflow Stages
                   </td>
-                  {/* 13. Total Revision Qty */}
+                  {/* Revision Qty */}
                   <td className="py-1.5 px-2.5 text-right tabular-nums text-amber-300 border-r border-[#1a386b]">
                     {totals.totalRev > 0 ? totals.totalRev.toLocaleString() : '-'}
                   </td>
-                  {/* 14, 15, 16 */}
+                  {/* 3 Auto Determined Stage Columns */}
                   <td colSpan={3} className="py-1.5 px-2.5 text-right text-slate-300 font-sans text-[10px] border-r border-[#1a386b]">
                     Auto Determined Status
                   </td>
-                  {/* 17. TC Status Footer - FROZEN BOTTOM & RIGHT */}
+                  {/* TC Status Footer - FROZEN BOTTOM & RIGHT */}
                   <td className="py-1.5 px-3 text-right font-mono text-[10px] text-emerald-300 font-bold whitespace-nowrap sticky bottom-0 right-0 z-40 bg-[#0b1b3d] border-l border-[#1a386b] shadow-[-6px_-2px_10px_-2px_rgba(0,0,0,0.35)]">
                     Live Status Frozen
                   </td>

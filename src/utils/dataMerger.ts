@@ -56,6 +56,8 @@ const COMPARABLE_FIELDS: FieldDefinition[] = [
   { key: 'finalTcApplyDate', label: 'Final TC Apply Date', type: 'date' },
   { key: 'finalTcReceivedDate', label: 'Final TC Received Date', type: 'date' },
   { key: 'tcNumber', label: 'TC Number', type: 'string' },
+  { key: 'lastChallanNumber', label: 'Last Delivery Challan No', type: 'string' },
+  { key: 'lastDeliveryDate', label: 'Last Delivery Date', type: 'date' },
 ];
 
 /**

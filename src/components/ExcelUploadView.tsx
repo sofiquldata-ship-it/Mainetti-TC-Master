@@ -13,14 +13,22 @@ import {
   FileCheck,
   Settings2,
   Sparkles,
+  Truck,
+  Hash,
 } from 'lucide-react';
-import { PIData, UploadedFileInfo } from '../types/tc';
+import { PIData, UploadedFileInfo, DeliveryReportFileInfo } from '../types/tc';
 import {
   parseExcelFile,
   downloadSampleExcelTemplate,
   clearPersistentStorage,
   saveToPersistentStorage,
 } from '../utils/excelParser';
+import {
+  parseDeliveryReportFile,
+  getSavedDeliveryReportInfo,
+  clearSavedDeliveryReport,
+  downloadSampleDeliveryReportTemplate,
+} from '../utils/deliveryReportParser';
 import { mergeExcelDataWithDatabase, SyncReport } from '../utils/dataMerger';
 
 interface ExcelUploadViewProps {
@@ -47,6 +55,102 @@ export const ExcelUploadView: React.FC<ExcelUploadViewProps> = ({
   const [lastUploadedFile, setLastUploadedFile] = useState<File | null>(null);
   const [syncReport, setSyncReport] = useState<SyncReport | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Delivery Report Upload State (PI-wise Last Delivery Challan Extractor)
+  const [isDeliveryDragging, setIsDeliveryDragging] = useState(false);
+  const [isDeliveryProcessing, setIsDeliveryProcessing] = useState(false);
+  const [deliveryReportInfo, setDeliveryReportInfo] = useState<DeliveryReportFileInfo | null>(() =>
+    getSavedDeliveryReportInfo()
+  );
+  const [deliveryMatchedLogs, setDeliveryMatchedLogs] = useState<
+    {
+      piNumber: string;
+      previousChallan: string;
+      newLastChallan: string;
+      deliveryCount: number;
+      lastDeliveryDate?: string;
+    }[]
+  >([]);
+  const deliveryFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDeliveryFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      await processDeliveryReport(file);
+    }
+  };
+
+  const handleDeliveryDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDeliveryDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      await processDeliveryReport(file);
+    }
+  };
+
+  const processDeliveryReport = async (file: File) => {
+    setErrorMessage(null);
+    setSuccessFeedback(null);
+    setIsDeliveryProcessing(true);
+
+    try {
+      if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
+        throw new Error('Please upload a valid Delivery Report Excel (.xlsx, .xls) or CSV file.');
+      }
+
+      const { updatedPiList, fileInfo, matchedLogs } = await parseDeliveryReportFile(
+        file,
+        currentData
+      );
+
+      setDeliveryReportInfo(fileInfo);
+      setDeliveryMatchedLogs(matchedLogs);
+
+      if (currentData.length > 0) {
+        const effectiveFileInfo: UploadedFileInfo = activeFileInfo || {
+          fileName: 'Master Production Report',
+          fileSize: file.size,
+          uploadDate: new Date().toLocaleString(),
+          totalRowsFound: updatedPiList.length,
+          validRowsWithTcCost: updatedPiList.length,
+          filteredOutZeroCostRows: 0,
+          totalCostUsd: updatedPiList.reduce((s, o) => s + (o.tcCost || 0), 0),
+        };
+        saveToPersistentStorage(updatedPiList, effectiveFileInfo);
+        onDataImported(updatedPiList, effectiveFileInfo);
+      }
+
+      setSuccessFeedback(
+        `Delivery Report Synced! Extracted PI-wise Last Delivery Challan Number for ${fileInfo.totalPisWithChallan} PIs (${fileInfo.matchedDatabasePis} matched with active TC PIs).`
+      );
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to parse the Delivery Report Excel file.');
+    } finally {
+      setIsDeliveryProcessing(false);
+      if (deliveryFileInputRef.current) {
+        deliveryFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleClearDeliveryReport = () => {
+    clearSavedDeliveryReport();
+    setDeliveryReportInfo(null);
+    setDeliveryMatchedLogs([]);
+    if (currentData.length > 0 && activeFileInfo) {
+      const cleaned = currentData.map((p) => ({
+        ...p,
+        lastChallanNumber: undefined,
+        lastDeliveryDate: undefined,
+        allChallanNumbers: undefined,
+        deliveryCount: undefined,
+      }));
+      saveToPersistentStorage(cleaned, activeFileInfo);
+      onDataImported(cleaned, activeFileInfo);
+    }
+    setSuccessFeedback('Saved Delivery Report & Last Challan Numbers cleared.');
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -156,7 +260,7 @@ export const ExcelUploadView: React.FC<ExcelUploadViewProps> = ({
           </h2>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <button
             type="button"
             onClick={() => downloadSampleExcelTemplate(true)}
@@ -164,6 +268,15 @@ export const ExcelUploadView: React.FC<ExcelUploadViewProps> = ({
           >
             <Download className="w-4 h-4 text-blue-300" />
             <span>Download Sample Template (.xlsx)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => downloadSampleDeliveryReportTemplate()}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-emerald-900/80 hover:bg-emerald-800 text-emerald-100 border border-emerald-600/60 rounded-sm transition-colors cursor-pointer"
+          >
+            <Truck className="w-4 h-4 text-emerald-300" />
+            <span>Sample Delivery Report (.xlsx)</span>
           </button>
         </div>
       </div>
@@ -296,121 +409,248 @@ export const ExcelUploadView: React.FC<ExcelUploadViewProps> = ({
         </div>
       )}
 
-      {/* Upload Zone & Saved Stats Grid */}
+      {/* Live Delivery Report Match Log Audit Card */}
+      {deliveryMatchedLogs.length > 0 && (
+        <div className="bg-white border border-emerald-300 rounded-sm p-4 space-y-2.5 shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200 pb-2">
+            <div className="flex items-center gap-2">
+              <Truck className="w-4 h-4 text-emerald-700" />
+              <h3 className="text-xs font-bold font-mono uppercase text-emerald-950">
+                Delivery Report Extracted: PI-Wise Last Delivery Challan Numbers ({deliveryMatchedLogs.length} PIs Updated)
+              </h3>
+            </div>
+            <span className="text-[11px] text-emerald-800 font-semibold bg-emerald-100 px-2 py-0.5 rounded-xs font-mono">
+              Auto-Linked to Challan & Declaration
+            </span>
+          </div>
+
+          <div className="max-h-48 overflow-y-auto border border-emerald-200 rounded-xs text-xs">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-emerald-50 text-[10px] font-bold uppercase text-emerald-900 sticky top-0 border-b border-emerald-200">
+                <tr>
+                  <th className="py-1.5 px-2.5 border-r border-emerald-200">PI Number</th>
+                  <th className="py-1.5 px-2.5 border-r border-emerald-200 text-emerald-800">
+                    Extracted Last Challan No
+                  </th>
+                  <th className="py-1.5 px-2.5 border-r border-emerald-200">Deliveries (Challan Count)</th>
+                  <th className="py-1.5 px-2.5 text-slate-700">Last Delivery Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-emerald-100 font-mono text-[11px]">
+                {deliveryMatchedLogs.map((log, idx) => (
+                  <tr key={idx} className="hover:bg-emerald-50/50">
+                    <td className="py-1.5 px-2.5 font-bold text-[#0b1b3d] border-r border-emerald-100 whitespace-nowrap">
+                      {log.piNumber}
+                    </td>
+                    <td className="py-1.5 px-2.5 font-black text-emerald-900 bg-emerald-100/40 border-r border-emerald-100 whitespace-nowrap">
+                      #{log.newLastChallan}
+                    </td>
+                    <td className="py-1.5 px-2.5 font-semibold text-slate-700 border-r border-emerald-100 whitespace-nowrap">
+                      <span className="bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded-xs text-[10px]">
+                        D-0{log.deliveryCount} ({log.deliveryCount} {log.deliveryCount === 1 ? 'Challan' : 'Challans'})
+                      </span>
+                    </td>
+                    <td className="py-1.5 px-2.5 text-slate-600 whitespace-nowrap">
+                      {log.lastDeliveryDate || '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Zones & Saved Stats Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Dropzone (Col Span 2) */}
-        <div className="lg:col-span-2 space-y-2">
-          {/* Header Row Selection Bar */}
-          <div className="bg-white border border-slate-200 rounded-sm p-2.5 px-3 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
-            <div className="flex items-center gap-1.5 text-xs text-slate-700">
-              <Settings2 className="w-4 h-4 text-[#1e3a8a]" />
-              <span className="font-semibold">Excel Column Headers Row:</span>
+        {/* Upload Dropzones (Col Span 2) */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* CARD 1: Master Production Report Upload */}
+          <div className="space-y-2">
+            {/* Header Row Selection Bar */}
+            <div className="bg-white border border-slate-200 rounded-sm p-2 px-3 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+              <div className="flex items-center gap-1.5 text-xs text-slate-700">
+                <FileSpreadsheet className="w-4 h-4 text-[#1e3a8a]" />
+                <span className="font-bold text-[#0b1b3d] uppercase tracking-wide">1. Master Production Report</span>
+                <span className="text-[10px] text-slate-400 font-mono">Header Row:</span>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => handleHeaderRowChange(0)}
+                  className={`px-2 py-0.5 text-xs font-semibold rounded-xs border transition-colors cursor-pointer ${
+                    headerRowSetting === 0
+                      ? 'bg-[#0b1b3d] text-white border-[#0b1b3d]'
+                      : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
+                  }`}
+                >
+                  Auto-Detect {detectedRowInfo ? `(Row ${detectedRowInfo})` : ''}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleHeaderRowChange(2)}
+                  className={`px-2 py-0.5 text-xs font-bold rounded-xs border transition-colors cursor-pointer ${
+                    headerRowSetting === 2
+                      ? 'bg-[#0b1b3d] text-white border-[#0b1b3d]'
+                      : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
+                  }`}
+                >
+                  Row 2 (ERP)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleHeaderRowChange(1)}
+                  className={`px-2 py-0.5 text-xs font-semibold rounded-xs border transition-colors cursor-pointer ${
+                    headerRowSetting === 1
+                      ? 'bg-[#0b1b3d] text-white border-[#0b1b3d]'
+                      : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
+                  }`}
+                >
+                  Row 1
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => handleHeaderRowChange(0)}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-xs border transition-colors cursor-pointer ${
-                  headerRowSetting === 0
-                    ? 'bg-[#0b1b3d] text-white border-[#0b1b3d]'
-                    : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
-                }`}
-              >
-                Auto-Detect {detectedRowInfo ? `(Row ${detectedRowInfo})` : ''}
-              </button>
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`border-2 border-dashed rounded-sm p-6 flex flex-col items-center justify-center text-center transition-all bg-white ${
+                isDragging
+                  ? 'border-blue-600 bg-blue-50/50 scale-[0.99]'
+                  : 'border-slate-300 hover:border-slate-400'
+              }`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx, .xls, .csv"
+                onChange={handleFileChange}
+                className="hidden"
+                id="excel-file-input"
+              />
 
-              <button
-                type="button"
-                onClick={() => handleHeaderRowChange(2)}
-                className={`px-2.5 py-1 text-xs font-bold rounded-xs border transition-colors cursor-pointer ${
-                  headerRowSetting === 2
-                    ? 'bg-[#0b1b3d] text-white border-[#0b1b3d]'
-                    : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
-                }`}
-              >
-                Row 2 (Standard ERP)
-              </button>
+              <div className="w-11 h-11 bg-slate-100 rounded-full flex items-center justify-center mb-2 border border-slate-200">
+                <UploadCloud className="w-5 h-5 text-[#0b1b3d]" />
+              </div>
 
-              <button
-                type="button"
-                onClick={() => handleHeaderRowChange(1)}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-xs border transition-colors cursor-pointer ${
-                  headerRowSetting === 1
-                    ? 'bg-[#0b1b3d] text-white border-[#0b1b3d]'
-                    : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
-                }`}
-              >
-                Row 1
-              </button>
+              <h3 className="text-xs font-bold text-[#0b1b3d] mb-0.5">
+                Drag & Drop Master Production Report (.xlsx, .csv)
+              </h3>
+              <p className="text-[11px] text-slate-500 mb-3 max-w-md">
+                Extracts orders with <strong className="text-slate-800">Model/Description</strong> = <strong className="text-blue-900">"TRANSACTION CERTIFICATE COST"</strong>.
+              </p>
+
+              <div className="flex items-center gap-3">
+                <label
+                  htmlFor="excel-file-input"
+                  className={`px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-white bg-[#0b1b3d] hover:bg-[#162d59] rounded-sm transition-colors cursor-pointer flex items-center gap-2 ${
+                    isProcessing ? 'opacity-70 pointer-events-none' : ''
+                  }`}
+                >
+                  {isProcessing ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-200" />
+                      <span>Processing Master Excel...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-blue-200" />
+                      <span>Browse Master Report</span>
+                    </>
+                  )}
+                </label>
+              </div>
             </div>
           </div>
 
-          <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-sm p-8 flex flex-col items-center justify-center text-center transition-all bg-white ${
-              isDragging
-                ? 'border-blue-600 bg-blue-50/50 scale-[0.99]'
-                : 'border-slate-300 hover:border-slate-400'
-            }`}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx, .xls, .csv"
-              onChange={handleFileChange}
-              className="hidden"
-              id="excel-file-input"
-            />
-
-            <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mb-3 border border-slate-200">
-              <UploadCloud className="w-7 h-7 text-[#0b1b3d]" />
+          {/* CARD 2: Delivery Report Upload (PI-wise Last Delivery Challan Extractor) */}
+          <div className="space-y-2">
+            <div className="bg-emerald-950/90 text-white border border-emerald-900 rounded-sm p-2 px-3 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+              <div className="flex items-center gap-1.5 text-xs">
+                <Truck className="w-4 h-4 text-emerald-300" />
+                <span className="font-bold tracking-wide uppercase">2. Delivery Report Upload</span>
+                <span className="text-[10px] text-emerald-200 font-mono">
+                  (Extracts PI-Wise Last Delivery Challan Number)
+                </span>
+              </div>
+              <span className="text-[10px] font-mono bg-emerald-800 text-emerald-100 px-1.5 py-0.5 rounded-xs font-semibold">
+                Challan Sync
+              </span>
             </div>
 
-            <h3 className="text-sm font-bold text-[#0b1b3d] mb-1">
-              Drag & Drop your Excel file here
-            </h3>
-            <p className="text-xs text-slate-500 mb-4 max-w-md">
-              Extracts orders with <strong className="text-slate-800">Model</strong> or <strong className="text-slate-800">Description</strong> = <strong className="text-blue-900">"TRANSACTION CERTIFICATE COST"</strong>.
-            </p>
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDeliveryDragging(true);
+              }}
+              onDragLeave={() => setIsDeliveryDragging(false)}
+              onDrop={handleDeliveryDrop}
+              className={`border-2 border-dashed rounded-sm p-6 flex flex-col items-center justify-center text-center transition-all bg-emerald-50/20 ${
+                isDeliveryDragging
+                  ? 'border-emerald-600 bg-emerald-50 scale-[0.99]'
+                  : 'border-emerald-300/80 hover:border-emerald-500'
+              }`}
+            >
+              <input
+                ref={deliveryFileInputRef}
+                type="file"
+                accept=".xlsx, .xls, .csv"
+                onChange={handleDeliveryFileChange}
+                className="hidden"
+                id="delivery-report-file-input"
+              />
 
-            <div className="flex items-center gap-3">
-              <label
-                htmlFor="excel-file-input"
-                className={`px-4 py-2 text-xs font-bold uppercase tracking-wider text-white bg-[#0b1b3d] hover:bg-[#162d59] rounded-sm transition-colors cursor-pointer flex items-center gap-2 ${
-                  isProcessing ? 'opacity-70 pointer-events-none' : ''
-                }`}
-              >
-                {isProcessing ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-blue-200" />
-                    <span>Processing Excel...</span>
-                  </>
-                ) : (
-                  <>
-                    <FileSpreadsheet className="w-4 h-4 text-blue-200" />
-                    <span>Browse Excel File</span>
-                  </>
-                )}
-              </label>
-            </div>
+              <div className="w-11 h-11 bg-emerald-100/70 rounded-full flex items-center justify-center mb-2 border border-emerald-300">
+                <Truck className="w-5 h-5 text-emerald-800" />
+              </div>
 
-            <div className="mt-4 pt-4 border-t border-slate-100 w-full flex items-center justify-center gap-4 text-[11px] text-slate-400 font-mono">
-              <span>Matches 'TRANSACTION CERTIFICATE COST'</span>
-              <span>·</span>
-              <span>Removes non-TC items</span>
-              <span>·</span>
-              <span>Persistent in LocalStorage</span>
+              <h3 className="text-xs font-bold text-emerald-950 mb-0.5">
+                Drag & Drop Delivery Report Excel File (.xlsx, .csv)
+              </h3>
+              <p className="text-[11px] text-slate-600 mb-3 max-w-md">
+                Scans all rows, groups by <strong className="text-slate-900">PI Number</strong>, and pulls the <strong className="text-emerald-900 font-bold">PI-wise LAST Delivery Challan Number</strong> into the system.
+              </p>
+
+              <div className="flex items-center gap-3">
+                <label
+                  htmlFor="delivery-report-file-input"
+                  className={`px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-white bg-emerald-800 hover:bg-emerald-900 rounded-sm transition-colors cursor-pointer flex items-center gap-2 ${
+                    isDeliveryProcessing ? 'opacity-70 pointer-events-none' : ''
+                  }`}
+                >
+                  {isDeliveryProcessing ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-200" />
+                      <span>Extracting Last Challans...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Truck className="w-3.5 h-3.5 text-emerald-200" />
+                      <span>Browse Delivery Report</span>
+                    </>
+                  )}
+                </label>
+              </div>
+
+              <div className="mt-3 pt-3 border-t border-emerald-200/60 w-full flex items-center justify-center gap-3 text-[11px] text-emerald-800 font-mono">
+                <span>Auto-Pulls Last Challan No</span>
+                <span>·</span>
+                <span>Handles Multiple Deliveries per PI</span>
+                <span>·</span>
+                <span>Syncs to Gate Pass & Declaration</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Persistence & Active File Stats (Col Span 1) */}
-        <div className="bg-white border border-slate-200 rounded-sm p-4 shadow-xs flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 mb-3">
+        {/* Persistence & Active Files Stats (Col Span 1) */}
+        <div className="bg-white border border-slate-200 rounded-sm p-4 shadow-xs flex flex-col justify-between space-y-4">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <HardDrive className="w-4 h-4 text-[#0b1b3d]" />
                 <h3 className="text-xs font-bold text-[#0b1b3d] uppercase tracking-wide">
@@ -418,16 +658,22 @@ export const ExcelUploadView: React.FC<ExcelUploadViewProps> = ({
                 </h3>
               </div>
               <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-xs bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
-                Persistent Storage
+                Persistent
               </span>
             </div>
 
+            {/* 1. Master Production Report State */}
             {activeFileInfo ? (
-              <div className="space-y-2.5 text-xs">
+              <div className="space-y-2 text-xs">
                 <div className="p-2.5 bg-slate-50 rounded-sm border border-slate-200">
-                  <span className="text-[10px] uppercase font-bold text-slate-500 block mb-0.5">
-                    Active File Name
-                  </span>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-[10px] uppercase font-bold text-slate-500">
+                      Master Report
+                    </span>
+                    <span className="text-[9px] font-mono text-blue-700 bg-blue-50 px-1 py-0.5 rounded-xs border border-blue-200 font-semibold">
+                      TC Orders
+                    </span>
+                  </div>
                   <div className="flex items-center gap-1.5 font-mono font-bold text-[#0b1b3d] truncate">
                     <FileCheck className="w-4 h-4 text-[#1e3a8a] shrink-0" />
                     <span className="truncate">{activeFileInfo.fileName}</span>
@@ -440,7 +686,7 @@ export const ExcelUploadView: React.FC<ExcelUploadViewProps> = ({
                 <div className="grid grid-cols-2 gap-2">
                   <div className="p-2 bg-slate-50 rounded-sm border border-slate-200">
                     <span className="text-[10px] text-slate-500 block">PIs with TC Cost</span>
-                    <span className="text-base font-bold font-mono text-emerald-700 tabular-nums">
+                    <span className="text-sm font-bold font-mono text-emerald-700 tabular-nums">
                       {activeFileInfo.validRowsWithTcCost}
                     </span>
                     <span className="text-[10px] text-slate-400 block">Kept in system</span>
@@ -448,7 +694,7 @@ export const ExcelUploadView: React.FC<ExcelUploadViewProps> = ({
 
                   <div className="p-2 bg-slate-50 rounded-sm border border-slate-200">
                     <span className="text-[10px] text-slate-500 block">Non-TC Items</span>
-                    <span className="text-base font-bold font-mono text-slate-500 tabular-nums">
+                    <span className="text-sm font-bold font-mono text-slate-500 tabular-nums">
                       {activeFileInfo.filteredOutZeroCostRows}
                     </span>
                     <span className="text-[10px] text-red-600 block">Filtered out</span>
@@ -457,24 +703,71 @@ export const ExcelUploadView: React.FC<ExcelUploadViewProps> = ({
 
                 <div className="p-2 bg-slate-50 rounded-sm border border-slate-200 flex items-center justify-between">
                   <span className="text-[11px] text-slate-600">Total TC Expenditure:</span>
-                  <strong className="text-sm font-bold font-mono text-[#0b1b3d]">
+                  <strong className="text-xs font-bold font-mono text-[#0b1b3d]">
                     ${activeFileInfo.totalCostUsd.toLocaleString()} USD
                   </strong>
                 </div>
               </div>
             ) : (
-              <div className="py-6 text-center text-slate-500 space-y-2">
-                <FileSpreadsheet className="w-8 h-8 text-slate-300 mx-auto" />
-                <p className="text-xs">No file uploaded yet.</p>
-                <p className="text-[11px] text-slate-400">
-                  Upload an Excel sheet to extract all PIs with 'TRANSACTION CERTIFICATE COST'.
-                </p>
+              <div className="py-3 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-sm">
+                No Master Production Report uploaded yet.
               </div>
             )}
+
+            {/* 2. Delivery Report State */}
+            <div className="pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] uppercase font-bold text-emerald-900 flex items-center gap-1">
+                  <Truck className="w-3.5 h-3.5 text-emerald-700" />
+                  Delivery Report (Last Challan)
+                </span>
+                {deliveryReportInfo && (
+                  <button
+                    type="button"
+                    onClick={handleClearDeliveryReport}
+                    className="text-[10px] text-red-600 hover:text-red-800 hover:underline cursor-pointer"
+                  >
+                    Clear Challans
+                  </button>
+                )}
+              </div>
+
+              {deliveryReportInfo ? (
+                <div className="p-2.5 bg-emerald-50/70 rounded-sm border border-emerald-200 space-y-1.5 text-xs">
+                  <div className="flex items-center gap-1.5 font-mono font-bold text-emerald-950 truncate">
+                    <Truck className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span className="truncate">{deliveryReportInfo.fileName}</span>
+                  </div>
+                  <span className="text-[10px] text-emerald-700 block font-mono">
+                    Loaded on: {deliveryReportInfo.uploadDate}
+                  </span>
+
+                  <div className="grid grid-cols-2 gap-1.5 pt-1">
+                    <div className="p-1.5 bg-white rounded-xs border border-emerald-200 text-center">
+                      <span className="text-[9px] uppercase text-slate-500 block">PIs in Report</span>
+                      <span className="text-xs font-bold font-mono text-emerald-900">
+                        {deliveryReportInfo.totalPisWithChallan}
+                      </span>
+                    </div>
+                    <div className="p-1.5 bg-white rounded-xs border border-emerald-200 text-center">
+                      <span className="text-[9px] uppercase text-slate-500 block">Matched with PIs</span>
+                      <span className="text-xs font-bold font-mono text-emerald-700">
+                        {deliveryReportInfo.matchedDatabasePis}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-3 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-sm bg-slate-50/50">
+                  <Truck className="w-5 h-5 text-slate-300 mx-auto mb-1" />
+                  <span>No Delivery Report uploaded yet.</span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Action Footer */}
-          <div className="pt-3 border-t border-slate-100 flex flex-col gap-2 mt-4">
+          <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
             {currentData.length > 0 && (
               <button
                 type="button"
@@ -493,14 +786,14 @@ export const ExcelUploadView: React.FC<ExcelUploadViewProps> = ({
                 className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium text-red-700 hover:text-red-800 bg-red-50/50 hover:bg-red-100/60 border border-red-200 rounded-sm transition-colors cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5 text-red-600" />
-                <span>Clear Saved Excel Data</span>
+                <span>Clear All Saved Data</span>
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* Live Data Preview Table */}
+      {/* Live Data Preview Table with Last Challan No Column */}
       {currentData.length > 0 && (
         <div className="bg-white border border-slate-200 rounded-sm shadow-xs overflow-hidden">
           <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
@@ -521,6 +814,9 @@ export const ExcelUploadView: React.FC<ExcelUploadViewProps> = ({
                 <tr>
                   <th className="py-2.5 px-3 border-r border-[#1a386b]">Order Date</th>
                   <th className="py-2.5 px-3 border-r border-[#1a386b]">PI Number</th>
+                  <th className="py-2.5 px-3 border-r border-[#1a386b] bg-[#112a59] text-emerald-300">
+                    Last Challan No
+                  </th>
                   <th className="py-2.5 px-3 border-r border-[#1a386b]">Buyer</th>
                   <th className="py-2.5 px-3 border-r border-[#1a386b]">Customer / Factory</th>
                   <th className="py-2.5 px-3 border-r border-[#1a386b] text-right">Order Qty</th>
@@ -557,6 +853,22 @@ export const ExcelUploadView: React.FC<ExcelUploadViewProps> = ({
                       </td>
                       <td className="py-2 px-3 font-mono font-bold text-[#0b1b3d] border-r border-slate-100 whitespace-nowrap">
                         {order.piNumber}
+                      </td>
+                      <td className="py-2 px-3 font-mono font-bold border-r border-slate-100 whitespace-nowrap bg-emerald-50/30">
+                        {order.lastChallanNumber ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-emerald-900 bg-emerald-100 px-1.5 py-0.5 rounded-xs text-[11px] font-mono">
+                              #{order.lastChallanNumber}
+                            </span>
+                            {order.deliveryCount && order.deliveryCount > 1 && (
+                              <span className="text-[9px] text-slate-500 font-mono" title={`Total ${order.deliveryCount} deliveries for this PI`}>
+                                (D-0{order.deliveryCount})
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-300 font-mono">—</span>
+                        )}
                       </td>
                       <td className="py-2 px-3 font-semibold text-slate-800 border-r border-slate-100 whitespace-nowrap">
                         {order.buyer}
