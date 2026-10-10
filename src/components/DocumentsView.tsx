@@ -6,6 +6,16 @@ import {
   CommercialDocSyncData,
 } from '../utils/commercialDocSync';
 import {
+  getMainettiLogo,
+  saveMainettiLogo,
+  resetMainettiLogo,
+} from '../assets/mainettiLogoData';
+import {
+  getMainettiSealSignature,
+  saveMainettiSealSignature,
+  resetMainettiSealSignature,
+} from '../assets/signatureData';
+import {
   FileText,
   Printer,
   Download,
@@ -26,9 +36,15 @@ import {
   Sparkles,
   PackageCheck,
   MapPin,
+  Package,
+  Calculator,
+  HelpCircle,
+  Check,
+  X,
+  Upload,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 
 export interface ChallanItem {
   id: string;
@@ -304,6 +320,54 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
   const [productCategory, setProductCategory] = useState('POLYBAGS');
   const [noOfDelivery, setNoOfDelivery] = useState('D-01');
   const [deliveryVanNo, setDeliveryVanNo] = useState('');
+  const [companyLogoUrl, setCompanyLogoUrl] = useState<string>(() => getMainettiLogo());
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      if (dataUrl) {
+        setCompanyLogoUrl(dataUrl);
+        saveMainettiLogo(dataUrl);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleResetLogo = () => {
+    const defaultUrl = resetMainettiLogo();
+    setCompanyLogoUrl(defaultUrl);
+  };
+
+  // Seal & Signature State (Synced with DeclarationView & Official Mainetti Stamp/Signature)
+  const [signatureImage, setSignatureImage] = useState<string>(() => {
+    return getMainettiSealSignature();
+  });
+  const sigInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSignatureUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      if (dataUrl) {
+        setSignatureImage(dataUrl);
+        saveMainettiSealSignature(dataUrl);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleResetSignature = () => {
+    const defaultSig = resetMainettiSealSignature();
+    setSignatureImage(defaultSig);
+  };
   
   // Addresses State
   const [invoiceToCompany, setInvoiceToCompany] = useState<string>(() => {
@@ -404,11 +468,30 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
     }
   };
 
+  // Persist packet counts so they survive tab changes and reloads
+  const persistPacketsToStorage = (updatedItems: ChallanItem[]) => {
+    const existing = getCommercialDocSync() || {};
+    const pktMap: Record<string, number | string> = { ...(existing.pktBoxByStyleOrSl || {}) };
+    updatedItems.forEach((it, idx) => {
+      if (it.pktBox !== undefined && it.pktBox !== '' && it.pktBox !== '-') {
+        const sKey = (it.styleNo || '').trim().toUpperCase();
+        const mKey = (it.modelProduct || '').trim().toUpperCase();
+        if (sKey) pktMap[sKey] = it.pktBox;
+        if (mKey) pktMap[mKey] = it.pktBox;
+        pktMap[`SL_${idx + 1}`] = it.pktBox;
+      }
+    });
+    saveCommercialDocSync({ pktBoxByStyleOrSl: pktMap });
+  };
+
   // Item modifications
   const handleUpdateItem = (index: number, field: keyof ChallanItem, value: any) => {
     setItems((prev) => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: value };
+      if (field === 'pktBox') {
+        persistPacketsToStorage(updated);
+      }
       return updated;
     });
   };
@@ -439,6 +522,52 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
     });
   };
 
+  // Packet Helper & Batch Auto-Calculation State
+  const [isAutoPacketModalOpen, setIsAutoPacketModalOpen] = useState(false);
+  const [isPacketHelpModalOpen, setIsPacketHelpModalOpen] = useState(false);
+  const [packetCalcMode, setPacketCalcMode] = useState<'pcs_per_box' | 'total_packets' | 'uniform'>('pcs_per_box');
+  const [pcsPerBoxInput, setPcsPerBoxInput] = useState<string>('500');
+  const [totalPacketsBatchInput, setTotalPacketsBatchInput] = useState<string>('69');
+  const [uniformPacketsBatchInput, setUniformPacketsBatchInput] = useState<string>('10');
+  const [customTotalPackets, setCustomTotalPackets] = useState<string>('');
+
+  const handleApplyAutoPackets = () => {
+    if (items.length === 0) return;
+
+    if (packetCalcMode === 'pcs_per_box') {
+      const pcs = Number(pcsPerBoxInput) || 500;
+      setItems((prev) => {
+        const updated = prev.map((it) => {
+          const qty = Number(it.deliveryQty || it.orderQty) || 0;
+          const pkts = Math.max(1, Math.ceil(qty / pcs));
+          return { ...it, pktBox: pkts };
+        });
+        persistPacketsToStorage(updated);
+        return updated;
+      });
+    } else if (packetCalcMode === 'total_packets') {
+      const targetTotal = Number(totalPacketsBatchInput) || 69;
+      const totalDeliv = totalDeliveryQty || 1;
+      setItems((prev) => {
+        const updated = prev.map((it) => {
+          const qty = Number(it.deliveryQty || it.orderQty) || 0;
+          const pkts = Math.max(1, Math.round((qty / totalDeliv) * targetTotal));
+          return { ...it, pktBox: pkts };
+        });
+        persistPacketsToStorage(updated);
+        return updated;
+      });
+    } else if (packetCalcMode === 'uniform') {
+      const val = Number(uniformPacketsBatchInput) || 10;
+      setItems((prev) => {
+        const updated = prev.map((it) => ({ ...it, pktBox: val }));
+        persistPacketsToStorage(updated);
+        return updated;
+      });
+    }
+    setIsAutoPacketModalOpen(false);
+  };
+
   // Calculations
   const totalOrderQty = items.reduce((sum, it) => sum + (Number(it.orderQty) || 0), 0);
   const totalDeliveryQty = items.reduce((sum, it) => sum + (Number(it.deliveryQty) || 0), 0);
@@ -452,32 +581,114 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
     window.print();
   };
 
-  // Download PDF using html2canvas & jsPDF
+  // Download PDF using html2canvas & jsPDF with exact A4 vector scale and robust fallback
   const handleDownloadPdf = async () => {
-    if (!printRef.current) return;
+    const targetId = docType === 'gate_pass' ? 'printable-challan-sheet' : 'printable-declaration-sheet';
+    const element = printRef.current;
+    if (!element) {
+      console.warn('PDF export target element not found');
+      return;
+    }
+
     try {
       setIsExportingPdf(true);
-      const canvas = await html2canvas(printRef.current, {
+
+      // Pre-clone or configure html2canvas for max fidelity & cross-browser support
+      const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
+        allowTaint: true,
         logging: false,
         backgroundColor: '#ffffff',
+        width: 794,
+        height: 1123,
+        windowWidth: 1200,
+        windowHeight: 1400,
+        onclone: (clonedDoc) => {
+          const clonedTarget = clonedDoc.getElementById(targetId);
+          if (!clonedTarget) return;
+
+          // Force exact A4 dimensions and clean borders on the cloned sheet
+          clonedTarget.style.width = '794px';
+          clonedTarget.style.minWidth = '794px';
+          clonedTarget.style.maxWidth = '794px';
+          clonedTarget.style.height = '1123px';
+          clonedTarget.style.minHeight = '1123px';
+          clonedTarget.style.maxHeight = '1123px';
+          clonedTarget.style.padding = '36px 36px';
+          clonedTarget.style.boxSizing = 'border-box';
+          clonedTarget.style.border = 'none';
+          clonedTarget.style.boxShadow = 'none';
+          clonedTarget.style.transform = 'none';
+          clonedTarget.style.margin = '0 auto';
+
+          // Reset parent elements to prevent horizontal overflow or flex shifting
+          let parent = clonedTarget.parentElement;
+          while (parent && parent !== clonedDoc.body) {
+            parent.style.padding = '0';
+            parent.style.margin = '0';
+            parent.style.overflow = 'visible';
+            parent.style.width = '794px';
+            parent.style.minWidth = '794px';
+            parent.style.maxWidth = '794px';
+            parent.style.display = 'block';
+            parent.style.boxShadow = 'none';
+            parent.style.background = '#ffffff';
+            parent = parent.parentElement;
+          }
+
+          // Replace input elements in the table with crisp text
+          const inputs = clonedTarget.querySelectorAll('input');
+          inputs.forEach((inp) => {
+            const span = clonedDoc.createElement('span');
+            span.textContent = inp.value || inp.placeholder || '-';
+            span.className = inp.className;
+            span.style.border = 'none';
+            span.style.background = 'transparent';
+            span.style.display = 'inline-block';
+            span.style.width = '100%';
+            span.style.textAlign = 'center';
+            inp.parentNode?.replaceChild(span, inp);
+          });
+        },
       });
-      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: 'a4',
       });
 
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      // Fit edge-to-edge on standard A4 page (210 x 297 mm) with zero offset margins
+      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+      
+      const fileName = docType === 'gate_pass'
+        ? `Delivery_Challan_${challanNumber || 'Mainetti'}_${deliveryDate || 'Date'}.pdf`
+        : `Supplier_Declaration_${challanNumber || 'Mainetti'}_${deliveryDate || 'Date'}.pdf`;
 
-      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Gate_Pass_Challan_${challanNumber || 'Mainetti'}_${deliveryDate}.pdf`);
+      // Method 1: standard jsPDF save
+      try {
+        pdf.save(fileName);
+      } catch (saveErr) {
+        // Fallback for iframe/browser sandbox restrictions: Blob anchor trigger
+        console.warn('Direct pdf.save failed, using blob URL fallback:', saveErr);
+        const blob = pdf.output('blob');
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 1500);
+      }
     } catch (error) {
       console.error('PDF export failed:', error);
-      alert('Could not export PDF. Please use the Print button to Save as PDF.');
+      // Fallback: trigger print dialog directly if download fails
+      window.print();
     } finally {
       setIsExportingPdf(false);
     }
@@ -716,6 +927,114 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
               <span className="text-[10px] text-slate-400 font-mono">Editable</span>
             </div>
 
+            {/* Company Logo (Top-Left Red Box) Customizer */}
+            <div className="p-2 bg-slate-50 border border-slate-200 rounded-xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div
+                  onClick={() => logoInputRef.current?.click()}
+                  className="h-10 px-2 bg-white border border-red-300 rounded-xs flex items-center justify-center cursor-pointer hover:border-red-500 transition-colors shadow-2xs"
+                  title="Click to upload Picture1.png"
+                >
+                  {companyLogoUrl && (
+                    <img
+                      src={companyLogoUrl}
+                      alt="Mainetti Logo"
+                      className="h-8 w-auto object-contain"
+                    />
+                  )}
+                </div>
+                <div>
+                  <span className="text-[10.5px] font-bold text-slate-800 block">
+                    Challan Top-Left Logo
+                  </span>
+                  <span className="text-[9.5px] text-emerald-700 font-medium">
+                    ✓ Picture1.png Applied
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => logoInputRef.current?.click()}
+                  className="px-2 py-1 text-[10.5px] font-bold bg-[#b91c1c] hover:bg-red-800 text-white rounded-xs flex items-center gap-1 cursor-pointer shadow-2xs transition-colors"
+                  title="Upload your Picture1.png logo file"
+                >
+                  <Upload className="w-3 h-3 text-white" />
+                  <span>Upload Pic</span>
+                </button>
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoUpload}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={handleResetLogo}
+                  className="text-[10px] text-slate-500 hover:text-red-700 hover:underline cursor-pointer px-1"
+                  title="Reset to default Mainetti logo"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+
+            {/* Seal & Signature (Red Box) Customizer */}
+            <div className="p-2 bg-red-50/40 border border-red-300 rounded-xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div
+                  onClick={() => sigInputRef.current?.click()}
+                  className="h-12 w-28 bg-white border border-red-300 rounded-xs flex items-center justify-center p-1 cursor-pointer hover:border-red-500 transition-colors shadow-2xs"
+                  title="Click to upload Seal & Signature image"
+                >
+                  <img
+                    src={signatureImage || getMainettiSealSignature()}
+                    alt="Seal & Sign"
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+                <div>
+                  <span className="text-[10.5px] font-bold text-slate-800 block">
+                    Seal & Signature (Red Box)
+                  </span>
+                  <span className="text-[9.5px] text-emerald-700 font-medium">
+                    {signatureImage ? '✓ Seal & Sign Applied' : 'Default Stamp Active'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => sigInputRef.current?.click()}
+                  className="px-2 py-1 text-[10.5px] font-bold bg-[#b91c1c] hover:bg-red-800 text-white rounded-xs flex items-center gap-1 cursor-pointer shadow-2xs transition-colors"
+                  title="Upload your Seal & Signature file"
+                >
+                  <Upload className="w-3 h-3 text-white" />
+                  <span>Upload Sign</span>
+                </button>
+                <input
+                  ref={sigInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleSignatureUpload}
+                  className="hidden"
+                />
+                {signatureImage && (
+                  <button
+                    type="button"
+                    onClick={handleResetSignature}
+                    className="text-[10px] text-slate-500 hover:text-red-700 hover:underline cursor-pointer px-1"
+                    title="Remove custom signature and revert to default"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
                 <label className="text-[10px] font-semibold text-slate-600 uppercase block mb-0.5">
@@ -868,28 +1187,65 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
 
           {/* Box 3: Line Items Quick Actions */}
           <div className="bg-white border border-slate-200 rounded-sm shadow-xs p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
-                3. Table Items ({items.length})
+            <div className="flex flex-wrap items-center justify-between gap-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                  3. Table Items ({items.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsPacketHelpModalOpen(true)}
+                  className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 px-1.5 py-0.5 rounded-xs border border-amber-300 cursor-pointer"
+                  title="Packet (Pkt/Box) কিভাবে বসাবেন তা জানতে ক্লিক করুন"
+                >
+                  <HelpCircle className="w-3 h-3 text-amber-600" />
+                  <span>Packet গাইড</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setIsAutoPacketModalOpen(true)}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded-xs border border-emerald-300 cursor-pointer shadow-2xs"
+                  title="Auto calculate or batch set packet count for all rows"
+                >
+                  <Package className="w-3 h-3 text-emerald-600" />
+                  <span>⚡ Auto Packet</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddItem}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:text-blue-900 bg-blue-50 px-2 py-0.5 rounded-xs border border-blue-200 cursor-pointer"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Add Row</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick helper tip banner */}
+            <div className="text-[10.5px] bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xs px-2 py-1 text-amber-900 flex items-center justify-between">
+              <span className="truncate">
+                💡 <strong>Pkt/Box বসানো:</strong> ডানের A4 টেবিলে সরাসরি ক্লিক করে অথবা নিচে টাইপ করুন
               </span>
               <button
                 type="button"
-                onClick={handleAddItem}
-                className="flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:text-blue-900 bg-blue-50 px-2 py-1 rounded-xs border border-blue-200 cursor-pointer"
+                onClick={() => setIsAutoPacketModalOpen(true)}
+                className="text-[10px] text-blue-700 font-bold hover:underline shrink-0 ml-1 cursor-pointer"
               >
-                <Plus className="w-3 h-3" />
-                <span>Add Row</span>
+                Auto-Calc ⚡
               </button>
             </div>
 
-            <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+            <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
               {items.map((item, idx) => (
                 <div
                   key={item.id}
-                  className="p-1.5 bg-slate-50 border border-slate-200 rounded-xs text-xs space-y-1"
+                  className="p-1.5 bg-slate-50 border border-slate-200 rounded-xs text-xs space-y-1 hover:border-slate-300 transition-colors"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-800">#{item.slNo}</span>
+                    <span className="font-bold text-slate-800 text-[11px]">#{item.slNo}</span>
                     <button
                       type="button"
                       onClick={() => handleDeleteItem(idx)}
@@ -906,28 +1262,50 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
                     placeholder="Style No / PO Reference"
                     className="w-full text-[11px] bg-white border border-slate-200 rounded-xs px-1.5 py-0.5 text-slate-800 font-mono"
                   />
-                  <div className="grid grid-cols-3 gap-1">
-                    <input
-                      type="text"
-                      value={item.modelProduct}
-                      onChange={(e) => handleUpdateItem(idx, 'modelProduct', e.target.value)}
-                      placeholder="Model/Product"
-                      className="text-[11px] bg-white border border-slate-200 rounded-xs px-1 py-0.5 text-slate-800 font-mono"
-                    />
-                    <input
-                      type="number"
-                      value={item.orderQty}
-                      onChange={(e) => handleUpdateItem(idx, 'orderQty', Number(e.target.value))}
-                      placeholder="Order Qty"
-                      className="text-[11px] bg-white border border-slate-200 rounded-xs px-1 py-0.5 text-slate-800 font-mono text-right"
-                    />
-                    <input
-                      type="number"
-                      value={item.deliveryQty}
-                      onChange={(e) => handleUpdateItem(idx, 'deliveryQty', Number(e.target.value))}
-                      placeholder="Delivery Qty"
-                      className="text-[11px] bg-white border border-slate-200 rounded-xs px-1 py-0.5 text-slate-800 font-mono text-right font-bold"
-                    />
+                  <div className="grid grid-cols-4 gap-1">
+                    <div>
+                      <label className="text-[8.5px] text-slate-500 font-medium block">Model</label>
+                      <input
+                        type="text"
+                        value={item.modelProduct}
+                        onChange={(e) => handleUpdateItem(idx, 'modelProduct', e.target.value)}
+                        placeholder="Model"
+                        className="w-full text-[10.5px] bg-white border border-slate-200 rounded-xs px-1 py-0.5 text-slate-800 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[8.5px] text-slate-500 font-medium block">Order Qty</label>
+                      <input
+                        type="number"
+                        value={item.orderQty}
+                        onChange={(e) => handleUpdateItem(idx, 'orderQty', Number(e.target.value))}
+                        placeholder="Order"
+                        className="w-full text-[10.5px] bg-white border border-slate-200 rounded-xs px-1 py-0.5 text-slate-800 font-mono text-right"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[8.5px] text-slate-500 font-medium block">Deliv Qty</label>
+                      <input
+                        type="number"
+                        value={item.deliveryQty}
+                        onChange={(e) => handleUpdateItem(idx, 'deliveryQty', Number(e.target.value))}
+                        placeholder="Deliv"
+                        className="w-full text-[10.5px] bg-white border border-slate-200 rounded-xs px-1 py-0.5 text-slate-800 font-mono text-right font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[8.5px] font-bold text-amber-900 bg-amber-100/90 rounded-2xs px-1 block text-center truncate">
+                        📦 Pkt/Box
+                      </label>
+                      <input
+                        type="text"
+                        value={item.pktBox === '-' ? '' : item.pktBox}
+                        onChange={(e) => handleUpdateItem(idx, 'pktBox', e.target.value)}
+                        placeholder="e.g. 10"
+                        className="w-full text-[10.5px] bg-amber-50/80 border border-amber-300 rounded-xs px-1 py-0.5 text-blue-950 font-mono font-bold text-center focus:bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                        title="Enter Packet / Box count for this line"
+                      />
+                    </div>
                   </div>
                 </div>
               ))}
@@ -959,19 +1337,18 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
                   <div className="flex justify-between items-start">
                     {/* Left: Mainetti Logo & Company Address */}
                     <div className="w-[55%]">
-                      <div className="flex items-center gap-2">
-                        {/* Red Mainetti Logo M Icon */}
-                        <div className="w-7 h-7 bg-[#b91c1c] text-white flex items-center justify-center font-bold text-lg rounded-xs">
-                          M
-                        </div>
-                        <div>
-                          <div className="text-xl font-black tracking-widest text-[#b91c1c] font-serif uppercase">
-                            MAINETTI
-                          </div>
-                          <div className="text-[8px] text-slate-600 tracking-wider font-semibold uppercase -mt-1">
-                            Retail Solutions Worldwide
-                          </div>
-                        </div>
+                      <div
+                        onClick={() => logoInputRef.current?.click()}
+                        className="inline-block cursor-pointer group"
+                        title="Click to upload custom logo (Picture1.png)"
+                      >
+                        {companyLogoUrl && (
+                          <img
+                            src={companyLogoUrl}
+                            alt="MAINETTI"
+                            className="h-12 w-auto object-contain group-hover:opacity-90 transition-opacity"
+                          />
+                        )}
                       </div>
 
                       <div className="mt-2 text-[9px] text-black font-semibold uppercase leading-snug space-y-0.5">
@@ -997,7 +1374,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
                         </div>
                         <div className="flex justify-between py-0.5 border-b border-black">
                           <span className="font-bold uppercase">PI-NUMBER</span>
-                          <span className="font-semibold font-mono text-[9px] text-right truncate max-w-[140px]">
+                          <span className="font-semibold font-mono text-[9px] text-right break-words max-w-[155px] leading-tight block">
                             {combinedPiNumberString}
                           </span>
                         </div>
@@ -1028,24 +1405,28 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
                   {/* 2. Address Boxes (Invoice To & Deliver To) */}
                   <div className="grid grid-cols-2 border border-black text-[9.5px]">
                     {/* Invoice To */}
-                    <div className="border-r border-black p-1.5 flex flex-col justify-between min-h-[55px]">
-                      <div className="font-bold uppercase mb-0.5">
+                    <div className="border-r border-black flex flex-col min-h-[60px]">
+                      <div className="font-bold uppercase px-1.5 py-1 border-b border-black">
                         INVOICE TO (COMPANY NAME & ADDRESS)
                       </div>
-                      <div className="font-bold uppercase text-[9px]">{invoiceToCompany}</div>
-                      <div className="text-[8.5px] uppercase text-slate-800 leading-tight">
-                        {invoiceToAddress}
+                      <div className="p-1.5 flex-1 flex flex-col justify-between">
+                        <div className="font-bold uppercase text-[9px]">{invoiceToCompany}</div>
+                        <div className="text-[8.5px] uppercase text-slate-800 leading-tight mt-0.5">
+                          {invoiceToAddress}
+                        </div>
                       </div>
                     </div>
 
                     {/* Deliver To */}
-                    <div className="p-1.5 flex flex-col justify-between min-h-[55px]">
-                      <div className="font-bold uppercase mb-0.5">
+                    <div className="flex flex-col min-h-[60px]">
+                      <div className="font-bold uppercase px-1.5 py-1 border-b border-black">
                         DELIVER TO (COMPANY NAME & ADDRESS)
                       </div>
-                      <div className="font-bold uppercase text-[9px]">{deliverToCompany}</div>
-                      <div className="text-[8.5px] uppercase text-slate-800 leading-tight">
-                        {deliverToAddress}
+                      <div className="p-1.5 flex-1 flex flex-col justify-between">
+                        <div className="font-bold uppercase text-[9px]">{deliverToCompany}</div>
+                        <div className="text-[8.5px] uppercase text-slate-800 leading-tight mt-0.5">
+                          {deliverToAddress}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1053,48 +1434,80 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
                   {/* 3. Line Items Table */}
                   <table className="w-full border-collapse border border-black text-[8.5px]">
                     <thead>
-                      <tr className="bg-[#fcd9be] text-black font-bold uppercase text-center border-b border-black">
-                        <th className="border border-black p-1 w-6" rowSpan={2}>
-                          SL NO
+                      <tr className="text-black font-bold uppercase text-center">
+                        <th
+                          style={{ backgroundColor: '#fcd9be', verticalAlign: 'middle', height: '32px' }}
+                          className="border border-black p-0.5 w-6"
+                          rowSpan={2}
+                        >
+                          <div className="flex items-center justify-center h-full">SL NO</div>
                         </th>
-                        <th className="border border-black p-1 w-44" rowSpan={2}>
-                          STYLE NO
+                        <th
+                          style={{ backgroundColor: '#fcd9be', verticalAlign: 'middle', height: '32px' }}
+                          className="border border-black p-0.5 w-44"
+                          rowSpan={2}
+                        >
+                          <div className="flex items-center justify-center h-full">STYLE NO</div>
                         </th>
-                        <th className="border border-black p-1 w-28" rowSpan={2}>
-                          MODEL/PRODUCT
+                        <th
+                          style={{ backgroundColor: '#fcd9be', verticalAlign: 'middle', height: '32px' }}
+                          className="border border-black p-0.5 w-28"
+                          rowSpan={2}
+                        >
+                          <div className="flex items-center justify-center h-full">MODEL/PRODUCT</div>
                         </th>
-                        <th className="border border-black p-0.5" colSpan={4}>
+                        <th
+                          style={{ backgroundColor: '#fcd9be', verticalAlign: 'middle', height: '16px' }}
+                          className="border border-black py-0.5"
+                          colSpan={4}
+                        >
                           MEASUREMENT <span className="text-[7.5px] font-normal">(MM)</span>
                         </th>
-                        <th className="border border-black p-1 w-16" rowSpan={2}>
-                          ORDER QTY
+                        <th
+                          style={{ backgroundColor: '#fcd9be', verticalAlign: 'middle', height: '32px' }}
+                          className="border border-black p-0.5 w-16"
+                          rowSpan={2}
+                        >
+                          <div className="flex items-center justify-center h-full">ORDER QTY</div>
                         </th>
-                        <th className="border border-black p-1 w-16" rowSpan={2}>
-                          DELIVERY QTY
+                        <th
+                          style={{ backgroundColor: '#fcd9be', verticalAlign: 'middle', height: '32px' }}
+                          className="border border-black p-0.5 w-16"
+                          rowSpan={2}
+                        >
+                          <div className="flex items-center justify-center h-full">DELIVERY QTY</div>
                         </th>
-                        <th className="border border-black p-1 w-12" rowSpan={2}>
-                          PKT/BOX
+                        <th
+                          style={{ backgroundColor: '#fcd9be', verticalAlign: 'middle', height: '32px' }}
+                          className="border border-black p-0.5 w-12"
+                          rowSpan={2}
+                        >
+                          <div className="flex items-center justify-center h-full">PKT/BOX</div>
                         </th>
-                        <th className="border border-black p-1 w-16" rowSpan={2}>
-                          BALANCE QTY
+                        <th
+                          style={{ backgroundColor: '#fcd9be', verticalAlign: 'middle', height: '32px' }}
+                          className="border border-black p-0.5 w-16"
+                          rowSpan={2}
+                        >
+                          <div className="flex items-center justify-center h-full">BALANCE QTY</div>
                         </th>
                       </tr>
-                      <tr className="bg-[#fcd9be] text-black font-bold text-center border-b border-black text-[7.5px]">
-                        <th className="border border-black p-0.5 w-8">WIDTH</th>
-                        <th className="border border-black p-0.5 w-8">LENGTH</th>
-                        <th className="border border-black p-0.5 w-8">GUSSET</th>
-                        <th className="border border-black p-0.5 w-8">FLAP</th>
+                      <tr className="text-black font-bold text-center text-[7.5px]">
+                        <th style={{ backgroundColor: '#fcd9be', verticalAlign: 'middle', height: '16px' }} className="border border-black p-0.5 w-8">WIDTH</th>
+                        <th style={{ backgroundColor: '#fcd9be', verticalAlign: 'middle', height: '16px' }} className="border border-black p-0.5 w-8">LENGTH</th>
+                        <th style={{ backgroundColor: '#fcd9be', verticalAlign: 'middle', height: '16px' }} className="border border-black p-0.5 w-8">GUSSET</th>
+                        <th style={{ backgroundColor: '#fcd9be', verticalAlign: 'middle', height: '16px' }} className="border border-black p-0.5 w-8">FLAP</th>
                       </tr>
                     </thead>
                     <tbody>
                       {/* Active line items */}
-                      {items.map((item) => (
+                      {items.map((item, idx) => (
                         <tr key={item.id} className="border-b border-black text-center h-[18px]">
                           <td className="border border-black font-bold">{item.slNo}</td>
-                          <td className="border border-black text-left px-1 font-semibold text-[8px] truncate max-w-[170px]">
+                          <td className="border border-black text-left px-1 font-semibold text-[8px] break-words leading-tight max-w-[170px]">
                             {item.styleNo}
                           </td>
-                          <td className="border border-black text-left px-1 font-mono text-[8px] truncate max-w-[110px]">
+                          <td className="border border-black text-left px-1 font-mono text-[8px] break-words leading-tight max-w-[110px]">
                             {item.modelProduct}
                           </td>
                           <td className="border border-black font-mono">{item.width}</td>
@@ -1107,7 +1520,16 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
                           <td className="border border-black text-right px-1 font-mono font-bold">
                             {Number(item.deliveryQty).toLocaleString()}
                           </td>
-                          <td className="border border-black font-mono">{item.pktBox}</td>
+                          <td className="border border-black font-mono p-0 bg-amber-50/20 hover:bg-amber-100/50 transition-colors">
+                            <input
+                              type="text"
+                              value={item.pktBox === '-' ? '' : item.pktBox}
+                              onChange={(e) => handleUpdateItem(idx, 'pktBox', e.target.value)}
+                              placeholder="-"
+                              className="w-full h-full text-center bg-transparent border-0 outline-none p-0 font-mono text-[8.5px] text-black font-bold focus:bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none cursor-pointer"
+                              title="Click to directly edit Packet / Box for this line"
+                            />
+                          </td>
                           <td className="border border-black font-mono">{item.balanceQty}</td>
                         </tr>
                       ))}
@@ -1145,8 +1567,14 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
                         <td className="border border-black text-right px-1 font-mono font-black text-[9px]">
                           {totalDeliveryQty.toLocaleString()}
                         </td>
-                        <td className="border border-black font-mono font-black text-[9px]">
-                          {totalPktBoxes > 0 ? totalPktBoxes : '69'}
+                        <td className="border border-black font-mono font-black text-[9px] p-0 bg-amber-200/50 hover:bg-amber-200 transition-colors">
+                          <input
+                            type="text"
+                            value={customTotalPackets !== '' ? customTotalPackets : (totalPktBoxes > 0 ? totalPktBoxes : '69')}
+                            onChange={(e) => setCustomTotalPackets(e.target.value)}
+                            className="w-full h-full text-center bg-transparent border-0 outline-none p-0 font-mono font-black text-[9px] text-black focus:bg-white focus:ring-1 focus:ring-blue-600"
+                            title="Total Packets (Auto-calculated from items, click to override)"
+                          />
                         </td>
                         <td className="border border-black font-mono font-bold text-[9px]">
                           -
@@ -1157,45 +1585,32 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
                 </div>
 
                 {/* 4. Footer & Signature Section */}
-                <div className="pt-2 space-y-6">
-                  <div className="text-[8px] text-black leading-tight">
-                    <span className="font-bold">Please Note: </span>
-                    Delivery challan has to sign back (sign & company chop seal) once goods delivered based on packet qty written on challan
-                  </div>
-
-                  <div className="flex justify-between items-end pt-4">
-                    {/* Consignee Signature Box */}
-                    <div className="w-[45%] text-center">
-                      <div className="border-t-2 border-black pt-1 font-bold text-[9px] uppercase">
-                        For consignee ( Sign, Company Chop Seal )
+                <div className="pt-4">
+                  <div className="flex justify-between items-end gap-4">
+                    {/* Consignee Signature Box (Sign & Company Chop Seal Area) */}
+                    <div className="w-[48%] flex flex-col justify-end">
+                      <div className="h-28 flex flex-col justify-end pb-1 bg-transparent">
+                        <div className="border-t-2 border-black pt-1.5 text-center font-bold text-[9.5px] uppercase text-black">
+                          For consignee ( Sign, Company Chop Seal )
+                        </div>
                       </div>
                     </div>
 
-                    {/* Authorized Signature & Certification */}
-                    <div className="w-[50%] text-center relative">
-                      <div className="text-[8.5px] italic text-slate-800 mb-1">
-                        We certify that the goods stated above have been in good condition
-                      </div>
-
-                      {/* Stamp & Signature Decorative Artwork */}
-                      <div className="my-1 flex flex-col items-center justify-center relative">
-                        <div className="text-blue-700 font-bold text-[10px] tracking-wide uppercase opacity-75">
-                          Mainetti Packaging Bangladesh Pvt. Ltd.
-                        </div>
-                        {/* Realistic Pen Signature Line */}
-                        <svg className="w-32 h-9 text-slate-800 -my-2" viewBox="0 0 150 40">
-                          <path
-                            d="M 10 30 Q 30 5 50 25 T 80 15 Q 110 35 135 10 Q 140 25 145 28"
-                            fill="none"
-                            stroke="#1e3a8a"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
+                    {/* Authorized Signature Box (Official Mainetti Seal & Pen Signature) */}
+                    <div className="w-[48%] flex flex-col justify-end">
+                      <div
+                        onClick={() => sigInputRef.current?.click()}
+                        className="h-32 flex flex-col justify-end p-1.5 bg-transparent relative cursor-pointer group"
+                        title="Click to Upload or Change Seal & Signature"
+                      >
+                        {/* Enlarged Seal & Signature Picture */}
+                        <div className="flex-1 flex items-center justify-center overflow-hidden py-0.5">
+                          <img
+                            src={signatureImage || getMainettiSealSignature()}
+                            alt="Mainetti Seal & Signature"
+                            className="h-26 sm:h-28 w-auto max-w-[290px] object-contain transition-transform group-hover:scale-105"
                           />
-                        </svg>
-                      </div>
-
-                      <div className="border-t-2 border-black pt-1 font-bold text-[9px] uppercase">
-                        Authorised signature (Mainetti Packaging Bangladesh Pvt Ltd)
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1211,17 +1626,20 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
                 <div className="space-y-4">
                   {/* Letterhead */}
                   <div className="flex justify-between items-center border-b-2 border-red-800 pb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-[#b91c1c] text-white flex items-center justify-center font-bold text-xl rounded-xs">
-                        M
-                      </div>
-                      <div>
-                        <div className="text-2xl font-black tracking-widest text-[#b91c1c] font-serif uppercase">
-                          MAINETTI
-                        </div>
-                        <div className="text-[9px] text-slate-600 tracking-wider font-semibold uppercase">
-                          Packaging Bangladesh Pvt. Ltd.
-                        </div>
+                    <div
+                      onClick={() => logoInputRef.current?.click()}
+                      className="flex items-center gap-3 cursor-pointer group"
+                      title="Click to upload custom logo (Picture1.png)"
+                    >
+                      {companyLogoUrl && (
+                        <img
+                          src={companyLogoUrl}
+                          alt="MAINETTI"
+                          className="h-12 w-auto object-contain group-hover:opacity-90 transition-opacity"
+                        />
+                      )}
+                      <div className="text-[9px] text-slate-600 tracking-wider font-semibold uppercase border-l border-slate-300 pl-3">
+                        Packaging Bangladesh Pvt. Ltd.
                       </div>
                     </div>
                     <div className="text-right text-[9px] text-slate-700">
@@ -1326,19 +1744,21 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
                     <div className="text-[10px] text-slate-500">Sign & Stamp</div>
                   </div>
 
-                  <div className="text-center w-64">
+                  <div
+                    onClick={() => sigInputRef.current?.click()}
+                    className="text-center w-64 cursor-pointer group"
+                    title="Click to Upload or Change Seal & Signature"
+                  >
                     <div className="text-blue-900 font-bold text-xs uppercase mb-1">
                       Mainetti Packaging Bangladesh Pvt. Ltd.
                     </div>
-                    <svg className="w-28 h-8 text-blue-900 mx-auto -my-1" viewBox="0 0 150 40">
-                      <path
-                        d="M 10 30 Q 30 5 50 25 T 80 15 Q 110 35 135 10 Q 140 25 145 28"
-                        fill="none"
-                        stroke="#1e3a8a"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
+                    <div className="h-24 w-auto max-w-[270px] mx-auto flex items-center justify-center my-1.5">
+                      <img
+                        src={signatureImage || getMainettiSealSignature()}
+                        alt="Seal & Signature"
+                        className="max-h-full max-w-full object-contain"
                       />
-                    </svg>
+                    </div>
                     <div className="border-t border-slate-800 pt-1 font-bold uppercase">
                       Authorized Signatory
                     </div>
@@ -1349,6 +1769,379 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
           </div>
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* 1. AUTO PACKET CALCULATOR MODAL */}
+      {/* ========================================================================= */}
+      {isAutoPacketModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-lg shadow-2xl border border-slate-300 w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="px-5 py-4 bg-gradient-to-r from-blue-900 to-indigo-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-md bg-white/10 flex items-center justify-center">
+                  <Package className="w-5 h-5 text-amber-300" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold tracking-wide">
+                    📦 Auto-Calculate & Batch Set Packets
+                  </h3>
+                  <p className="text-[11px] text-blue-200">
+                    Challan-এর প্রতিটি লাইনে Pkt/Box এক ক্লিকে অটো-হিসাব বা সেট করুন
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAutoPacketModalOpen(false)}
+                className="text-white/70 hover:text-white p-1 hover:bg-white/10 rounded-xs transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 overflow-y-auto">
+              {/* Mode Selection Tabs */}
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-md text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setPacketCalcMode('pcs_per_box')}
+                  className={`py-2 px-2 text-center rounded-xs transition-colors cursor-pointer ${
+                    packetCalcMode === 'pcs_per_box'
+                      ? 'bg-white text-blue-900 shadow-xs font-bold border border-slate-200'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  🎯 Pcs Per Box
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPacketCalcMode('total_packets')}
+                  className={`py-2 px-2 text-center rounded-xs transition-colors cursor-pointer ${
+                    packetCalcMode === 'total_packets'
+                      ? 'bg-white text-blue-900 shadow-xs font-bold border border-slate-200'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  ⚖️ Split Total Packets
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPacketCalcMode('uniform')}
+                  className={`py-2 px-2 text-center rounded-xs transition-colors cursor-pointer ${
+                    packetCalcMode === 'uniform'
+                      ? 'bg-white text-blue-900 shadow-xs font-bold border border-slate-200'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  🔢 Uniform (সব সমান)
+                </button>
+              </div>
+
+              {/* Mode 1: Pcs Per Box */}
+              {packetCalcMode === 'pcs_per_box' && (
+                <div className="space-y-3 bg-blue-50/50 p-3.5 rounded-md border border-blue-200/60">
+                  <div>
+                    <label className="text-xs font-bold text-slate-800 block mb-1">
+                      প্রতি বক্সে কত পিস থাকবে? (Pcs / Box):
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={pcsPerBoxInput}
+                        onChange={(e) => setPcsPerBoxInput(e.target.value)}
+                        placeholder="500"
+                        className="w-32 px-3 py-1.5 bg-white border border-slate-300 rounded-xs text-sm font-mono font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                      <span className="text-xs text-slate-500 font-medium">পিস প্রতি কার্টন/বক্স</span>
+                    </div>
+                  </div>
+
+                  {/* Preset quick buttons */}
+                  <div>
+                    <span className="text-[11px] font-semibold text-slate-600 block mb-1.5">
+                      দ্রুত নির্বাচন করুন (Presets):
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {['250', '500', '1000', '1500', '2000'].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setPcsPerBoxInput(preset)}
+                          className={`text-xs px-2.5 py-1 rounded-xs border font-mono font-semibold transition-colors cursor-pointer ${
+                            pcsPerBoxInput === preset
+                              ? 'bg-blue-700 text-white border-blue-700 shadow-2xs'
+                              : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                          }`}
+                        >
+                          {preset} pcs/box
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-600 leading-tight">
+                    💡 সূত্র: <strong>Packet = Delivery Qty ÷ {pcsPerBoxInput || 500}</strong> (ভগ্নাংশ থাকলে পরবর্তী পূর্ণসংখ্যায় রাউন্ড হবে)
+                  </p>
+                </div>
+              )}
+
+              {/* Mode 2: Split Total Packets */}
+              {packetCalcMode === 'total_packets' && (
+                <div className="space-y-3 bg-amber-50/50 p-3.5 rounded-md border border-amber-200/60">
+                  <div>
+                    <label className="text-xs font-bold text-slate-800 block mb-1">
+                      মোট কতটি প্যাকেট বা কার্টন হবে? (Target Total Packets):
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={totalPacketsBatchInput}
+                        onChange={(e) => setTotalPacketsBatchInput(e.target.value)}
+                        placeholder="69"
+                        className="w-32 px-3 py-1.5 bg-white border border-slate-300 rounded-xs text-sm font-mono font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                      />
+                      <span className="text-xs text-slate-500 font-medium">মোট কার্টন সংখ্যা</span>
+                    </div>
+                  </div>
+
+                  {/* Preset quick buttons */}
+                  <div>
+                    <span className="text-[11px] font-semibold text-slate-600 block mb-1.5">
+                      জনপ্রিয় প্যাকেট সংখ্যা:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {['50', '69', '75', '100', '120'].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setTotalPacketsBatchInput(preset)}
+                          className={`text-xs px-2.5 py-1 rounded-xs border font-mono font-semibold transition-colors cursor-pointer ${
+                            totalPacketsBatchInput === preset
+                              ? 'bg-amber-700 text-white border-amber-700 shadow-2xs'
+                              : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                          }`}
+                        >
+                          {preset} Boxes
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-600 leading-tight">
+                    💡 এটি মোট ডেলিভারি কোয়ান্টিটি অনুসারে প্রতিটি লাইনের অনুপাতে প্যাকেট ভাগ করে দেবে।
+                  </p>
+                </div>
+              )}
+
+              {/* Mode 3: Uniform */}
+              {packetCalcMode === 'uniform' && (
+                <div className="space-y-3 bg-emerald-50/50 p-3.5 rounded-md border border-emerald-200/60">
+                  <div>
+                    <label className="text-xs font-bold text-slate-800 block mb-1">
+                      প্রতিটি লাইনে নির্দিষ্ট প্যাকেট সংখ্যা বসান:
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={uniformPacketsBatchInput}
+                        onChange={(e) => setUniformPacketsBatchInput(e.target.value)}
+                        placeholder="10"
+                        className="w-32 px-3 py-1.5 bg-white border border-slate-300 rounded-xs text-sm font-mono font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                      />
+                      <span className="text-xs text-slate-500 font-medium">প্রতি আইটেমে</span>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-600 leading-tight">
+                    💡 টেবিলের প্রতিটি লাইনে সমানভাবে এই সংখ্যাটি বসে যাবে।
+                  </p>
+                </div>
+              )}
+
+              {/* Live Preview List */}
+              <div className="border border-slate-200 rounded-md overflow-hidden text-xs">
+                <div className="bg-slate-100 px-3 py-1.5 font-bold text-slate-700 flex items-center justify-between border-b border-slate-200">
+                  <span>ফলাফল প্রিভিউ ({items.length} টি আইটেম)</span>
+                  <span className="font-mono text-[11px] text-slate-500">
+                    মোট ডেলিভারি: {totalDeliveryQty.toLocaleString()} pcs
+                  </span>
+                </div>
+                <div className="max-h-36 overflow-y-auto divide-y divide-slate-100">
+                  {items.map((it) => {
+                    let previewPkt: number | string = it.pktBox;
+                    const qty = Number(it.deliveryQty || it.orderQty) || 0;
+                    if (packetCalcMode === 'pcs_per_box') {
+                      const pcs = Number(pcsPerBoxInput) || 500;
+                      previewPkt = Math.max(1, Math.ceil(qty / pcs));
+                    } else if (packetCalcMode === 'total_packets') {
+                      const target = Number(totalPacketsBatchInput) || 69;
+                      const tot = totalDeliveryQty || 1;
+                      previewPkt = Math.max(1, Math.round((qty / tot) * target));
+                    } else if (packetCalcMode === 'uniform') {
+                      previewPkt = uniformPacketsBatchInput || 10;
+                    }
+
+                    return (
+                      <div key={it.id} className="px-3 py-1.5 flex items-center justify-between">
+                        <div className="truncate max-w-[280px]">
+                          <span className="font-bold text-slate-800">#{it.slNo}</span>{' '}
+                          <span className="text-slate-600">{it.styleNo}</span>{' '}
+                          <span className="text-[10px] text-slate-400 font-mono">({qty.toLocaleString()} pcs)</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 font-mono">
+                          <span className="text-[11px] text-slate-400 line-through">
+                            {it.pktBox}
+                          </span>
+                          <span className="text-[11px] font-bold text-blue-900 bg-amber-100 px-1.5 py-0.5 rounded-xs border border-amber-300">
+                            {previewPkt} pkt
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setIsAutoPacketModalOpen(false)}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-800 border border-slate-300 rounded-xs bg-white cursor-pointer"
+              >
+                বাতিল করুন
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyAutoPackets}
+                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-white bg-blue-700 hover:bg-blue-800 rounded-xs shadow-xs cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>সব আইটেমে প্রয়োগ করুন</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 2. PACKET HELPER GUIDE MODAL */}
+      {/* ========================================================================= */}
+      {isPacketHelpModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-lg shadow-2xl border border-slate-300 w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="px-5 py-4 bg-gradient-to-r from-amber-600 to-orange-700 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-md bg-white/20 flex items-center justify-center">
+                  <HelpCircle className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold tracking-wide">
+                    💡 Packet (Pkt/Box) কিভাবে বসাবেন?
+                  </h3>
+                  <p className="text-[11px] text-amber-100">
+                    Delivery Challan-এ প্যাকেট সংখ্যা বসানোর ৪টি সহজ উপায়
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPacketHelpModalOpen(false)}
+                className="text-white/80 hover:text-white p-1 hover:bg-white/10 rounded-xs transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Guide Steps */}
+            <div className="p-5 space-y-3.5 overflow-y-auto text-xs text-slate-700 leading-relaxed">
+              {/* Step 1 */}
+              <div className="flex items-start gap-3 p-3 bg-amber-50/60 rounded-md border border-amber-200">
+                <div className="w-6 h-6 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                  ১
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-xs mb-0.5">
+                    সরাসরি ডানের A4 টেবিলে ক্লিক করে (Direct Click & Type)
+                  </h4>
+                  <p className="text-slate-600 text-[11.5px]">
+                    ডানপাশে যে <strong>A4 Delivery Challan</strong> দেখা যাচ্ছে, তার টেবিলের <strong>PKT/BOX</strong> কলামে সরাসরি ক্লিক করে যেকোনো সংখ্যা (যেমন: 10, 15, 25) লিখে দিন। এটি সাথে সাথে সেভ হবে এবং প্রিন্ট/PDF-এ পারফেক্ট থাকবে।
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="flex items-start gap-3 p-3 bg-blue-50/60 rounded-md border border-blue-200">
+                <div className="w-6 h-6 rounded-full bg-blue-700 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                  ২
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-xs mb-0.5">
+                    বামপাশের "3. Table Items" ফর্ম থেকে (Form Inputs)
+                  </h4>
+                  <p className="text-slate-600 text-[11.5px]">
+                    বামপাশের প্যানেলে <strong>3. Table Items</strong> লিস্টে প্রতিটি আইটেমের পাশে একটি হলুদ রঙের <strong>📦 Pkt/Box</strong> ইনপুট বক্স আছে। সেখানে আপনার কাঙ্ক্ষিত সংখ্যাটি লিখে দিলেই হবে।
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div className="flex items-start gap-3 p-3 bg-emerald-50/60 rounded-md border border-emerald-200">
+                <div className="w-6 h-6 rounded-full bg-emerald-700 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                  ৩
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-xs mb-0.5">
+                    ⚡ Auto Packet ক্যালকুলেটর দিয়ে (1-Click Auto Calc)
+                  </h4>
+                  <p className="text-slate-600 text-[11.5px]">
+                    <strong>"⚡ Auto Packet"</strong> বাটনে ক্লিক করে পিস প্রতি বক্সের সাইজ (যেমন 500 pcs/box বা 1000 pcs/box) দিলে পুরো টেবিলের সব প্রোডাক্টের প্যাকেট সংখ্যা এক সেকেন্ডে অটো-ক্যালকুলেট হয়ে যাবে।
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 4 */}
+              <div className="flex items-start gap-3 p-3 bg-purple-50/60 rounded-md border border-purple-200">
+                <div className="w-6 h-6 rounded-full bg-purple-700 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                  ৪
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-xs mb-0.5">
+                    Excel বা Packing List আপলোড থেকে (Auto Sync)
+                  </h4>
+                  <p className="text-slate-600 text-[11.5px]">
+                    আপনার এক্সেল ফাইল বা কমার্শিয়াল ডকুমেন্টে যদি <code>Packet</code>, <code>Box</code>, <code>Pkt/Box</code> বা <code>Cartons</code> কলাম থাকে, ফাইল আপলোড করার সময় সিস্টেম স্বয়ংক্রিয়ভাবে সেটি ডিটেক্ট করে এখানে বসিয়ে দেয়।
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPacketHelpModalOpen(false);
+                  setIsAutoPacketModalOpen(true);
+                }}
+                className="flex items-center gap-1 text-xs font-bold text-blue-700 hover:text-blue-900 cursor-pointer"
+              >
+                <span>⚡ Auto Packet ওপেন করুন</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPacketHelpModalOpen(false)}
+                className="px-4 py-1.5 text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 rounded-xs shadow-xs cursor-pointer"
+              >
+                বুঝেছি, ধন্যবাদ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

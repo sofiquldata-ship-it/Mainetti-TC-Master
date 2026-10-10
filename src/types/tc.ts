@@ -59,6 +59,7 @@ export interface PIData {
   deliveryStatus: DeliveryStatus;
   invoiceNumber?: string;
   invoiceDate?: string;
+  model?: string;
   standard: string;
   certBody: string;
   quantityPcs: number;

@@ -421,6 +421,7 @@ export async function parseExcelFile(
     invoiceNumber?: string;
     invoiceDate?: string;
     contactPerson?: string;
+    model?: string;
   }
 
   const piGroups: Record<string, GroupedPI> = {};
@@ -655,6 +656,9 @@ export async function parseExcelFile(
     if (finalRecDate && !group.finalTcReceivedDate) group.finalTcReceivedDate = finalRecDate;
     if (tcNum && !group.tcNumber) group.tcNumber = tcNum;
     if (invNum && !group.invoiceNumber) group.invoiceNumber = invNum;
+    if (modelVal && !group.model && !isThisRowTcCost && !isNonProductChargeLine(modelVal)) {
+      group.model = modelVal;
+    }
 
     // If buyer/customer wasn't filled on initial line, update from valid line
     if (group.buyer === 'Global Buyer' && buyer !== 'Global Buyer') group.buyer = buyer;
@@ -837,6 +841,7 @@ export async function parseExcelFile(
         orderStatus: group.orderStatus || '',
         invoiceNumber: group.invoiceNumber || '',
         invoiceDate: group.invoiceDate || '',
+        model: group.model || (extractedProductItems[0]?.modelProduct) || (group.productDescription !== 'TRANSACTION CERTIFICATE COST' ? group.productDescription : 'POLYBAGS'),
         contactPerson: group.contactPerson || 'System',
         standard: group.standard,
         certBody: group.certBody,

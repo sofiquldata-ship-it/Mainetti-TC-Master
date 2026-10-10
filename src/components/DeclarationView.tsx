@@ -1,8 +1,13 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { PIData, TCStatus, computeAutomatedTcStatus } from '../types/tc';
-import { getSignatureDataUrl } from '../assets/signatureData';
+import {
+  getMainettiSealSignature,
+  saveMainettiSealSignature,
+  resetMainettiSealSignature,
+  getSignatureDataUrl,
+} from '../assets/signatureData';
+import { DeclarationModal } from './DeclarationModal';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import {
   FileCheck2,
   Download,
@@ -183,26 +188,17 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
     return localStorage.getItem(STORAGE_KEY_COMPANY) || 'Mainetti Packaging Bangladesh Pvt Ltd';
   });
 
-  // Persistent Signature State
+  // Persistent Signature State (Default: Official Mainetti Seal & Sign from Picture2.jpg)
   const [signatureImage, setSignatureImage] = useState<string>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_SIGNATURE);
-    if (saved && saved.startsWith('data:image')) {
-      return saved;
-    }
-    return '';
+    return getMainettiSealSignature();
   });
 
   const [isSavedFeedback, setIsSavedFeedback] = useState<boolean>(false);
 
   useEffect(() => {
     if (!signatureImage) {
-      const saved = localStorage.getItem(STORAGE_KEY_SIGNATURE);
-      if (saved && saved.startsWith('data:image')) {
-        setSignatureImage(saved);
-      } else {
-        const defaultSig = getSignatureDataUrl();
-        setSignatureImage(defaultSig);
-      }
+      const defaultSig = getMainettiSealSignature();
+      setSignatureImage(defaultSig);
     }
   }, [signatureImage]);
 
@@ -241,13 +237,9 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
         if (ev.target?.result) {
           const base64Data = String(ev.target.result);
           setSignatureImage(base64Data);
-          try {
-            localStorage.setItem(STORAGE_KEY_SIGNATURE, base64Data);
-            setIsSavedFeedback(true);
-            setTimeout(() => setIsSavedFeedback(false), 3000);
-          } catch (storageErr) {
-            console.warn('Could not save signature to localStorage:', storageErr);
-          }
+          saveMainettiSealSignature(base64Data);
+          setIsSavedFeedback(true);
+          setTimeout(() => setIsSavedFeedback(false), 3000);
         }
       };
       reader.readAsDataURL(file);
@@ -255,8 +247,7 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
   };
 
   const handleResetSignature = () => {
-    localStorage.removeItem(STORAGE_KEY_SIGNATURE);
-    const defaultSig = getSignatureDataUrl();
+    const defaultSig = resetMainettiSealSignature();
     setSignatureImage(defaultSig);
     if (signatureInputRef.current) signatureInputRef.current.value = '';
     setIsSavedFeedback(true);
@@ -267,6 +258,7 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
 
   const letterContainerRef = useRef<HTMLDivElement>(null);
 
@@ -275,11 +267,17 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
     if (!searchQuery.trim()) return overduePiList;
     const q = searchQuery.toLowerCase().trim();
     return overduePiList.filter(
-      (p) =>
-        p.piNumber.toLowerCase().includes(q) ||
-        (p.invoiceNumber && p.invoiceNumber.toLowerCase().includes(q)) ||
-        (p.buyer && p.buyer.toLowerCase().includes(q)) ||
-        (p.customer && p.customer.toLowerCase().includes(q))
+      (p) => {
+        const model = p.model || (p.productItems && p.productItems[0]?.modelProduct) || p.productDescription || '';
+        return (
+          p.piNumber.toLowerCase().includes(q) ||
+          (p.invoiceNumber && p.invoiceNumber.toLowerCase().includes(q)) ||
+          (p.lastChallanNumber && p.lastChallanNumber.toLowerCase().includes(q)) ||
+          model.toLowerCase().includes(q) ||
+          (p.buyer && p.buyer.toLowerCase().includes(q)) ||
+          (p.customer && p.customer.toLowerCase().includes(q))
+        );
+      }
     );
   }, [overduePiList, searchQuery]);
 
@@ -414,38 +412,43 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
       currentY += 28;
 
       // Check if space for signature, otherwise add page
-      if (currentY > pageHeight - 130) {
+      if (currentY > pageHeight - 140) {
         pdf.addPage();
         currentY = 70;
       }
 
-      // 8. Signature Graphic (Exact Signature matching uploaded document)
+      // 8. Company Header Name FIRST (Rearranged)
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(11);
+      pdf.setTextColor(20, 20, 20);
+      pdf.text(companyName, leftMargin, currentY);
+      currentY += 16;
+
+      // 9. Red Box: Seal & Signature Graphic
       const sigX = leftMargin;
       const sigY = currentY;
 
       if (signatureImage) {
         try {
-          pdf.addImage(signatureImage, 'PNG', sigX, sigY - 10, 68, 58);
+          pdf.addImage(signatureImage, 'PNG', sigX, sigY, 98, 44);
+          currentY += 50;
         } catch (imgErr) {
-          console.warn('Could not add signature image to PDF, drawing fallback vector:', imgErr);
+          console.warn('Could not add signature image to PDF:', imgErr);
+          currentY += 44;
         }
+      } else {
+        // Space reserved for physical hand seal & signature
+        currentY += 46;
       }
 
-      currentY += 52;
-
-      // 9. Signatory details
-      pdf.setFont('helvetica', 'normal');
+      // 10. Signatory details (Rearranged below Seal & Sign)
+      pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(11);
       pdf.setTextColor(20, 20, 20);
       pdf.text(signatoryName, leftMargin, currentY);
       currentY += 15;
+      pdf.setFont('helvetica', 'normal');
       pdf.text(signatoryDesignation, leftMargin, currentY);
-      currentY += 38;
-
-      // 10. Company Footer Name
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(11);
-      pdf.text(companyName, leftMargin, currentY);
 
       const fileName = `Declaration_Letter_${thresholdDaysNum}_Days_Over_${new Date().toISOString().slice(0, 10)}.pdf`;
       pdf.save(fileName);
@@ -489,6 +492,16 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
 
         {/* Top Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#0b1b3d] hover:bg-[#162d59] text-white rounded-sm shadow-2xs transition-colors cursor-pointer"
+            title="Open 90 Days & 180 Days Over Orders in Dedicated Modal View"
+          >
+            <Layers className="w-3.5 h-3.5 text-amber-300" />
+            <span>Open in Modal</span>
+          </button>
+
           <button
             type="button"
             onClick={handleCopyPiList}
@@ -734,6 +747,17 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
                           </span>
                         </div>
 
+                        <div className="mt-0.5 text-[10px] text-slate-500 flex items-center justify-between gap-1">
+                          <span className="truncate">
+                            Model: <strong className="text-slate-800">{pi.model || (pi.productItems && pi.productItems[0]?.modelProduct) || (pi.productDescription !== 'TRANSACTION CERTIFICATE COST' ? pi.productDescription : 'POLYBAGS')}</strong>
+                          </span>
+                          {pi.lastChallanNumber && (
+                            <span className="shrink-0 text-blue-900 bg-blue-50 px-1 py-0.2 rounded-xs font-mono font-bold border border-blue-200">
+                              Challan: {pi.lastChallanNumber}
+                            </span>
+                          )}
+                        </div>
+
                         <div className="mt-0.5 text-[10px] text-slate-400 truncate">
                           Buyer: <span className="text-slate-700">{pi.buyer}</span> | Qty: {pi.orderQuantity?.toLocaleString() || pi.quantityPcs?.toLocaleString()} PCS
                         </div>
@@ -836,51 +860,75 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
                 </div>
               </div>
 
-              {/* Signature Upload & Status */}
-              <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-14 h-11 border border-slate-200 rounded-xs bg-slate-50 flex items-center justify-center p-1 overflow-hidden shadow-2xs">
-                    {signatureImage ? (
-                      <img src={signatureImage} alt="Signature" className="max-h-full max-w-full object-contain" />
-                    ) : (
-                      <span className="text-[9px] text-slate-400">None</span>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-semibold text-slate-800 block">
-                      Official Signature
-                    </span>
-                    <span className="text-[9.5px] text-emerald-600 font-medium">
-                      ✓ Saved to Storage
-                    </span>
-                  </div>
+              {/* Red Box: Official Seal & Signature Customizer */}
+              <div className="p-2.5 bg-red-50/40 border border-red-300 rounded-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10.5px] font-bold text-red-900 uppercase flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
+                    <span>Red Box: Seal & Signature</span>
+                  </span>
+                  <span className="text-[9.5px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-2xs border border-emerald-200">
+                    {signatureImage ? '✓ Seal & Sign Loaded' : 'Blank (Manual Stamp)'}
+                  </span>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
+                <div className="flex items-center justify-between gap-2">
+                  <div
                     onClick={() => signatureInputRef.current?.click()}
-                    className="px-2.5 py-1 text-[11px] font-bold bg-[#0b1b3d] hover:bg-[#162d59] text-white rounded-xs flex items-center gap-1 cursor-pointer shadow-2xs transition-colors"
-                    title="Upload & Save New Signature Image"
+                    className="w-20 h-14 border border-red-300 rounded-xs bg-white flex items-center justify-center p-1 overflow-hidden shadow-2xs cursor-pointer hover:border-red-500 transition-colors"
+                    title="Click to Upload Seal & Signature image"
                   >
-                    <Upload className="w-3 h-3 text-amber-300" />
-                    <span>Change</span>
-                  </button>
-                  <input
-                    ref={signatureInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleSignatureUpload}
-                    className="hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleResetSignature}
-                    className="text-[10px] text-slate-500 hover:text-red-700 hover:underline cursor-pointer px-1"
-                    title="Reset to default Ashraf Uddin Khan signature"
-                  >
-                    Reset
-                  </button>
+                    {signatureImage ? (
+                      <img src={signatureImage} alt="Seal & Signature" className="max-h-full max-w-full object-contain" />
+                    ) : (
+                      <span className="text-[9px] text-red-500 font-semibold text-center leading-tight">
+                        + Add Seal & Sign
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex-1 space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => signatureInputRef.current?.click()}
+                      className="w-full px-2 py-1 text-[11px] font-bold bg-[#b91c1c] hover:bg-red-800 text-white rounded-xs flex items-center justify-center gap-1 cursor-pointer shadow-2xs transition-colors"
+                      title="Upload your Seal & Signature image (PNG/JPG)"
+                    >
+                      <Upload className="w-3 h-3 text-white" />
+                      <span>{signatureImage ? 'Change Seal & Sign' : 'Upload Seal & Sign'}</span>
+                    </button>
+                    <input
+                      ref={signatureInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleSignatureUpload}
+                      className="hidden"
+                    />
+
+                    <div className="flex items-center justify-between px-0.5 text-[9.5px]">
+                      <button
+                        type="button"
+                        onClick={handleResetSignature}
+                        className="text-slate-600 hover:text-blue-700 hover:underline cursor-pointer"
+                        title="Use default Ashraf Uddin Khan signature"
+                      >
+                        Default Sig
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSignatureImage('');
+                          localStorage.setItem(STORAGE_KEY_SIGNATURE, '');
+                          setIsSavedFeedback(true);
+                          setTimeout(() => setIsSavedFeedback(false), 2000);
+                        }}
+                        className="text-red-700 hover:underline font-semibold cursor-pointer"
+                        title="Clear signature to leave blank red box for physical stamp"
+                      >
+                        Clear (Blank Box)
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -969,33 +1017,73 @@ export const DeclarationView: React.FC<DeclarationViewProps> = ({
               </div>
             </div>
 
-            {/* 6. Exact Uploaded Signature Graphic & Signatory Details */}
-            <div className="pt-6 space-y-1">
-              {signatureImage && (
-                <div className="h-16 w-36 select-none flex items-center">
-                  <img
-                    src={signatureImage}
-                    alt="Ashraf Uddin Khan Signature"
-                    className="h-full w-auto max-w-full object-contain"
-                  />
-                </div>
-              )}
-
-              <div className="text-[13px] space-y-0.5 pt-0.5">
-                <div className="font-normal text-slate-900">{signatoryName}</div>
-                <div className="text-slate-700">{signatoryDesignation}</div>
+            {/* 6. Company Name (Rearranged: Above Signature Block) */}
+            <div className="pt-6">
+              <div className="font-bold text-[13.5px] text-slate-950 uppercase tracking-tight">
+                {companyName}
               </div>
             </div>
 
-            {/* 7. Company Name */}
-            <div className="pt-5">
-              <div className="font-bold text-[13.5px] text-slate-950">
-                {companyName}
+            {/* 7. Red Box: Seal & Signature Area (Enlarged & Prominently Positioned) */}
+            <div className="my-2.5 w-full max-w-md">
+              <div
+                onClick={() => signatureInputRef.current?.click()}
+                className={`group relative cursor-pointer border-2 border-dashed rounded-xs p-2.5 transition-all ${
+                  signatureImage
+                    ? 'border-red-500 bg-red-50/25 hover:border-red-600 hover:bg-red-50/40 shadow-xs'
+                    : 'border-red-500 bg-red-50/35 hover:bg-red-50/60 shadow-xs'
+                }`}
+                title="Red Box: Click to Add or Change Seal & Signature"
+              >
+                {/* Red Box Identifier Header */}
+                <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-red-300 text-[10px]">
+                  <span className="font-bold text-red-700 uppercase flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
+                    Red Box: Official Seal & Signature
+                  </span>
+                  <span className="text-red-600 font-semibold text-[9.5px]">
+                    {signatureImage ? 'Click to change' : '+ Click to upload seal & sign'}
+                  </span>
+                </div>
+
+                {/* Big Seal & Signature Picture Container */}
+                {signatureImage ? (
+                  <div className="h-32 sm:h-36 w-full select-none flex items-center justify-center bg-white p-2 rounded-2xs border border-red-200/80 shadow-xs">
+                    <img
+                      src={signatureImage}
+                      alt="Seal & Signature"
+                      className="h-full w-auto max-w-full object-contain filter drop-shadow-2xs transition-transform group-hover:scale-[1.02]"
+                    />
+                  </div>
+                ) : (
+                  <div className="h-32 sm:h-36 w-full flex flex-col items-center justify-center py-4 px-3 text-center space-y-1 bg-white/60 rounded-2xs border border-red-200">
+                    <div className="text-sm font-bold text-red-700">
+                      🔴 Red Box: Company Seal & Signature Area
+                    </div>
+                    <div className="text-[11px] text-slate-600 max-w-xs">
+                      Official seal & signature will be placed here at full size. Click to upload or leave blank for physical stamp.
+                    </div>
+                  </div>
+                )}
               </div>
+            </div>
+
+            {/* 8. Signatory Details (Rearranged below Seal & Sign) */}
+            <div className="text-[13px] space-y-0.5 pt-0.5">
+              <div className="font-bold text-slate-900">{signatoryName}</div>
+              <div className="text-slate-700">{signatoryDesignation}</div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Dedicated Declaration 90D & 180D Results Modal */}
+      <DeclarationModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        data={data}
+        onSelectPI={onSelectPI}
+      />
     </div>
   );
 };

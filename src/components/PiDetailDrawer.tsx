@@ -568,11 +568,16 @@ export const PiDetailDrawer: React.FC<PiDetailDrawerProps> = ({
               <span className="text-xs font-bold text-[#0b1b3d] uppercase tracking-wide block">
                 PI Quantities & Commercial Logistics
               </span>
-              {pi.lastChallanNumber && (
-                <span className="text-[11px] font-mono font-bold text-indigo-900 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-xs">
-                  Challan: {pi.lastChallanNumber}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-mono font-bold text-slate-800 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded-xs">
+                  Model: {pi.model || (pi.productItems && pi.productItems[0]?.modelProduct) || (pi.productDescription !== 'TRANSACTION CERTIFICATE COST' ? pi.productDescription : 'POLYBAGS')}
                 </span>
-              )}
+                {pi.lastChallanNumber && (
+                  <span className="text-[11px] font-mono font-bold text-indigo-900 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-xs">
+                    Challan: {pi.lastChallanNumber}
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-xs border border-slate-200 font-mono text-xs">

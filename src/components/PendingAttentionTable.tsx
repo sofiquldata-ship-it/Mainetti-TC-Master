@@ -10,6 +10,7 @@ import {
   isCancelledPi,
 } from '../types/tc';
 import { BatchUpdateModal } from './BatchUpdateModal';
+import { DeclarationModal } from './DeclarationModal';
 import {
   ArrowUpDown,
   ArrowUp,
@@ -23,6 +24,7 @@ import {
   ChevronsRight,
   Pin,
   Zap,
+  Layers,
 } from 'lucide-react';
 
 interface PendingAttentionTableProps {
@@ -42,6 +44,7 @@ type SortField =
   | 'invoiceNumber'
   | 'invoiceDate'
   | 'lastChallanNumber'
+  | 'model'
   | 'buyer'
   | 'customer'
   | 'contactPerson'
@@ -74,7 +77,21 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
   const [tableSearch, setTableSearch] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState<boolean>(false);
+  const [isDeclarationModalOpen, setIsDeclarationModalOpen] = useState<boolean>(false);
   const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  const declarationOverdueCount = useMemo(() => {
+    const today = new Date().getTime();
+    return data.filter((item) => {
+      const autoSt = computeAutomatedTcStatus(item);
+      const effectiveSt = autoSt !== 'Not Requested' ? autoSt : (item.tcStatus || 'Not Requested');
+      if (effectiveSt === 'Final TC Received' || effectiveSt === 'Issued' || item.finalTcReceivedDate) return false;
+      if (!item.invoiceDate) return false;
+      const dTime = new Date(item.invoiceDate).getTime();
+      if (isNaN(dTime)) return false;
+      return Math.floor((today - dTime) / (1000 * 60 * 60 * 24)) > 90;
+    }).length;
+  }, [data]);
 
   const handleScroll = (direction: 'left' | 'right' | 'start' | 'end') => {
     if (tableContainerRef.current) {
@@ -198,6 +215,8 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
           (i.invoiceNumber && i.invoiceNumber.toLowerCase().includes(q)) ||
           (i.lastChallanNumber && i.lastChallanNumber.toLowerCase().includes(q)) ||
           (i.allChallanNumbers && i.allChallanNumbers.some((c) => c.toLowerCase().includes(q))) ||
+          (i.model && i.model.toLowerCase().includes(q)) ||
+          (i.productDescription && i.productDescription.toLowerCase().includes(q)) ||
           (i.tcNumber && i.tcNumber.toLowerCase().includes(q)) ||
           (i.buyer && i.buyer.toLowerCase().includes(q)) ||
           (i.customer && i.customer.toLowerCase().includes(q)) ||
@@ -467,6 +486,22 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
             )}
           </div>
 
+          {/* Declaration 90D/180D Analysis Modal Opener */}
+          <button
+            type="button"
+            onClick={() => setIsDeclarationModalOpen(true)}
+            className="flex items-center gap-1 px-2 py-0.5 text-xs font-semibold text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-300 rounded-sm shadow-2xs transition-colors cursor-pointer"
+            title="Open 90 & 180 Days Over Orders in Dedicated Modal View"
+          >
+            <Layers className="w-3 h-3 text-blue-700" />
+            <span>90D/180D Modal</span>
+            {declarationOverdueCount > 0 && (
+              <span className="font-mono text-[9px] bg-red-600 text-white font-bold px-1 py-0.2 rounded-full">
+                {declarationOverdueCount}
+              </span>
+            )}
+          </button>
+
           {onSaveToGoogleSheets && (
             <button
               type="button"
@@ -579,6 +614,18 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                 <div className="flex items-center gap-1">
                   <span>Challan No</span>
                   {renderSortIcon('lastChallanNumber')}
+                </div>
+              </th>
+
+              {/* 3.8. MODEL - FROZEN TOP */}
+              <th
+                onClick={() => handleSort('model')}
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap sticky top-0 z-30 bg-[#0b1b3d]"
+                title="Product Model / Item Model"
+              >
+                <div className="flex items-center gap-1">
+                  <span>Model</span>
+                  {renderSortIcon('model')}
                 </div>
               </th>
 
@@ -990,6 +1037,16 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                       )}
                     </td>
 
+                    {/* 3.8. MODEL */}
+                    <td
+                      className="py-1.5 px-2.5 whitespace-nowrap border-r border-slate-100 font-mono text-slate-700 max-w-[160px] truncate"
+                      title={pi.model || (pi.productItems && pi.productItems[0]?.modelProduct) || (pi.productDescription !== 'TRANSACTION CERTIFICATE COST' ? pi.productDescription : 'POLYBAGS')}
+                    >
+                      <span className="font-semibold text-slate-800">
+                        {pi.model || (pi.productItems && pi.productItems[0]?.modelProduct) || (pi.productDescription !== 'TRANSACTION CERTIFICATE COST' ? pi.productDescription : 'POLYBAGS')}
+                      </span>
+                    </td>
+
                     {/* 4. BUYER */}
                     <td
                       className={`py-1.5 px-2.5 whitespace-nowrap border-r border-slate-100 ${
@@ -1202,7 +1259,7 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
             return (
               <tfoot className="bg-[#0b1b3d] text-white font-mono text-[10px] font-bold border-t-2 border-[#132c5e] sticky bottom-0 z-30 shadow-[0_-2px_6px_rgba(0,0,0,0.25)]">
                 <tr>
-                  <td colSpan={10} className="py-1.5 px-2.5 uppercase tracking-wider text-left border-r border-[#1a386b] sticky bottom-0 left-0 z-40 bg-[#0b1b3d] shadow-[2px_-2px_4px_rgba(0,0,0,0.25)]">
+                  <td colSpan={11} className="py-1.5 px-2.5 uppercase tracking-wider text-left border-r border-[#1a386b] sticky bottom-0 left-0 z-40 bg-[#0b1b3d] shadow-[2px_-2px_4px_rgba(0,0,0,0.25)]">
                     TOTAL SUMMARY ({filteredData.length} PIs)
                   </td>
                   {/* Total Order Quantity */}
@@ -1299,6 +1356,14 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
           }
           setSelectedIds([]);
         }}
+      />
+
+      {/* 90 Days & 180 Days Over Declaration Results Modal */}
+      <DeclarationModal
+        isOpen={isDeclarationModalOpen}
+        onClose={() => setIsDeclarationModalOpen(false)}
+        data={data}
+        onSelectPI={onSelectPI}
       />
     </div>
   );
