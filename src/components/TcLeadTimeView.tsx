@@ -1,5 +1,11 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { PIData, computeAutomatedTcStatus, computeActionableWaitingStatus } from '../types/tc';
+import {
+  PIData,
+  computeAutomatedTcStatus,
+  computeActionableWaitingStatus,
+  getDaysBetweenDates,
+  getDaysFromDateToToday,
+} from '../types/tc';
 import { FilterBar } from './FilterBar';
 import {
   Timer,
@@ -79,29 +85,17 @@ const DEFAULT_SLA_SETTINGS: SlaSettings = {
 const STORAGE_KEY = 'mainetti_custom_tc_sla_settings';
 
 /**
- * Calculates days between two date strings (YYYY-MM-DD)
+ * Calculates days between two date strings
  */
 function getDaysBetween(startStr?: string, endStr?: string): number | null {
-  if (!startStr || !startStr.trim() || !endStr || !endStr.trim()) return null;
-  const start = new Date(startStr.trim().replace(/\//g, '-'));
-  const end = new Date(endStr.trim().replace(/\//g, '-'));
-  if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
-  const diffTime = end.getTime() - start.getTime();
-  const days = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  return Math.max(0, days);
+  return getDaysBetweenDates(startStr, endStr);
 }
 
 /**
  * Calculates days passed from date string to today
  */
 function getDaysToToday(dateStr?: string): number | null {
-  if (!dateStr || !dateStr.trim()) return null;
-  const start = new Date(dateStr.trim().replace(/\//g, '-'));
-  if (isNaN(start.getTime())) return null;
-  const now = new Date();
-  const diffTime = now.getTime() - start.getTime();
-  const days = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  return Math.max(0, days);
+  return getDaysFromDateToToday(dateStr);
 }
 
 export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
@@ -180,32 +174,71 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
       const hasFinalApply = !!(item.finalTcApplyDate && item.finalTcApplyDate.trim());
       const hasFinalRec = !!(item.finalTcReceivedDate && item.finalTcReceivedDate.trim());
 
-      // Stage 1: Request -> Comm Doc Received
-      const stage1 = hasReq && hasCommDoc ? getDaysBetween(item.tcRequestDate, item.receivedCommercialDocDate) : null;
-      // Stage 2: Comm Doc -> Draft TC Received
-      const stage2 = hasCommDoc && hasDraftTc ? getDaysBetween(item.receivedCommercialDocDate, item.draftTcDate) : null;
-      // Stage 3: Draft TC -> Draft Confirmed
-      const stage3 = hasDraftTc && hasDraftConf ? getDaysBetween(item.draftTcDate, item.draftConfirmationDate) : null;
-      // Stage 4: Draft Confirmed -> Final TC Applied
-      const stage4 = hasDraftConf && hasFinalApply ? getDaysBetween(item.draftConfirmationDate, item.finalTcApplyDate) : null;
-      // Stage 5: Final TC Applied -> Final TC Received
-      const stage5 = hasFinalApply && hasFinalRec ? getDaysBetween(item.finalTcApplyDate, item.finalTcReceivedDate) : null;
+      // Stage 1: Request -> Comm Doc Received (or to today if currently waiting in Stage 1)
+      const stage1 =
+        hasReq && hasCommDoc
+          ? getDaysBetween(item.tcRequestDate, item.receivedCommercialDocDate)
+          : hasReq && !hasCommDoc && !hasDraftTc && !hasDraftConf && !hasFinalApply && !hasFinalRec
+          ? getDaysToToday(item.tcRequestDate)
+          : null;
 
-      // Total Lead Time: from TC Request to Final TC Received (or to today if in progress)
+      // Stage 2: Comm Doc -> Draft TC Received (or to today if currently waiting in Stage 2)
+      const stage2 =
+        hasCommDoc && hasDraftTc
+          ? getDaysBetween(item.receivedCommercialDocDate, item.draftTcDate)
+          : !hasCommDoc && hasReq && hasDraftTc
+          ? getDaysBetween(item.tcRequestDate, item.draftTcDate)
+          : hasCommDoc && !hasDraftTc && !hasDraftConf && !hasFinalApply && !hasFinalRec
+          ? getDaysToToday(item.receivedCommercialDocDate)
+          : null;
+
+      // Stage 3: Draft TC -> Draft Confirmed (or to today if Draft TC is done & waiting for Confirmation)
+      const stage3 =
+        hasDraftTc && hasDraftConf
+          ? getDaysBetween(item.draftTcDate, item.draftConfirmationDate)
+          : hasDraftTc && !hasDraftConf && !hasFinalApply && !hasFinalRec
+          ? getDaysToToday(item.draftTcDate)
+          : null;
+
+      // Stage 4: Draft Confirmed -> Final TC Applied (or to today if currently waiting in Stage 4)
+      const stage4 =
+        hasDraftConf && hasFinalApply
+          ? getDaysBetween(item.draftConfirmationDate, item.finalTcApplyDate)
+          : hasDraftConf && !hasFinalApply && !hasFinalRec
+          ? getDaysToToday(item.draftConfirmationDate)
+          : null;
+
+      // Stage 5: Final TC Applied -> Final TC Received (or to today if currently waiting in Stage 5)
+      const stage5 =
+        hasFinalApply && hasFinalRec
+          ? getDaysBetween(item.finalTcApplyDate, item.finalTcReceivedDate)
+          : hasFinalApply && !hasFinalRec
+          ? getDaysToToday(item.finalTcApplyDate)
+          : null;
+
+      // Total Lead Time: from earliest workflow start date to Final TC Received (or to today if in progress)
+      const firstStartDate =
+        item.tcRequestDate ||
+        item.receivedCommercialDocDate ||
+        item.draftTcDate ||
+        item.draftConfirmationDate ||
+        item.finalTcApplyDate;
+      const hasAnyWorkflowDate = !!(firstStartDate && firstStartDate.trim());
+
       let totalLeadDays: number | null = null;
       let isCompleted = false;
 
-      if (hasReq && hasFinalRec) {
-        totalLeadDays = getDaysBetween(item.tcRequestDate, item.finalTcReceivedDate);
+      if (hasAnyWorkflowDate && hasFinalRec) {
+        totalLeadDays = getDaysBetween(firstStartDate, item.finalTcReceivedDate);
         isCompleted = true;
-      } else if (hasReq) {
-        totalLeadDays = getDaysToToday(item.tcRequestDate);
+      } else if (hasAnyWorkflowDate) {
+        totalLeadDays = getDaysToToday(firstStartDate);
         isCompleted = false;
       }
 
       // Determine Signal Level (Overdue Alert, Warning, On-track) dynamically with custom SLA
       let signalLevel: SignalLevel = 'none';
-      if (hasReq && totalLeadDays !== null) {
+      if (hasAnyWorkflowDate && totalLeadDays !== null) {
         if (totalLeadDays > slaSettings.totalSlaDays) {
           signalLevel = 'critical'; // Exceeded custom SLA
         } else if (totalLeadDays >= slaSettings.warningDays) {
@@ -246,7 +279,7 @@ export const TcLeadTimeView: React.FC<TcLeadTimeViewProps> = ({
         stage5Days: stage5,
         totalLeadDays,
         isCompleted,
-        hasReq,
+        hasReq: hasAnyWorkflowDate,
         signalLevel,
         worstBottleneck,
       };

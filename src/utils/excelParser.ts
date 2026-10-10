@@ -374,6 +374,10 @@ export async function parseExcelFile(
   const gussetCol = findColIndex(['gusset', 'g(mm)', 'g (mm)', 'g', 'gusset(mm)', 'gusset mm', 'bottom gusset']);
   const flapCol = findColIndex(['flap', 'f(mm)', 'f (mm)', 'f', 'flap(mm)', 'flap mm', 'lip']);
   const pktBoxCol = findColIndex(['pkt/box', 'pkt / box', 'packet/box', 'pkt/ctn', 'pkt', 'box', 'boxes', 'cartons', 'ctn', 'pack/box', 'packet']);
+  const customerAddressCol = findColIndex(['customer address', 'invoice address', 'invoice to address', 'bill to address', 'factory address', 'party address', 'address', 'location', 'factory location']);
+  const deliveryAddressCol = findColIndex(['delivery address', 'deliver to address', 'ship to address', 'shipping address', 'destination address', 'delivery location']);
+  const deliverToCompanyCol = findColIndex(['deliver to', 'delivery to', 'deliver to company', 'ship to', 'consignee', 'delivery factory', 'delivery party']);
+  const deliveryVanNoCol = findColIndex(['delivery van no', 'van no', 'vehicle no', 'truck no', 'covered van no', 'transport no']);
   
   // New TC-related columns
   const tcRequestDateCol = findColIndex(['tc request date', 'request date', 'tc requested date', 'tc request', 'request dt']);
@@ -422,6 +426,10 @@ export async function parseExcelFile(
     invoiceDate?: string;
     contactPerson?: string;
     model?: string;
+    customerAddress?: string;
+    deliveryAddress?: string;
+    deliverToCompany?: string;
+    deliveryVanNo?: string;
   }
 
   const piGroups: Record<string, GroupedPI> = {};
@@ -606,6 +614,10 @@ export async function parseExcelFile(
     const invNum = invoiceNumberCol !== -1 && rowArray[invoiceNumberCol] ? String(rowArray[invoiceNumberCol]).trim() : undefined;
     const invDate = invoiceDateCol !== -1 && rowArray[invoiceDateCol] ? parseDateValue(rowArray[invoiceDateCol]) : undefined;
     const rawContactPerson = contactPersonCol !== -1 && rowArray[contactPersonCol] ? String(rowArray[contactPersonCol]).trim() : undefined;
+    const rawCustAddr = customerAddressCol !== -1 && rowArray[customerAddressCol] ? String(rowArray[customerAddressCol]).trim() : undefined;
+    const rawDelivAddr = deliveryAddressCol !== -1 && rowArray[deliveryAddressCol] ? String(rowArray[deliveryAddressCol]).trim() : undefined;
+    const rawDelivComp = deliverToCompanyCol !== -1 && rowArray[deliverToCompanyCol] ? String(rowArray[deliverToCompanyCol]).trim() : undefined;
+    const rawVanNo = deliveryVanNoCol !== -1 && rowArray[deliveryVanNoCol] ? String(rowArray[deliveryVanNoCol]).trim() : undefined;
 
     if (!piGroups[groupKey]) {
       piGroups[groupKey] = {
@@ -621,6 +633,10 @@ export async function parseExcelFile(
         invoiceNumber: invNum,
         invoiceDate: invDate,
         contactPerson: rawContactPerson,
+        customerAddress: rawCustAddr,
+        deliveryAddress: rawDelivAddr,
+        deliverToCompany: rawDelivComp,
+        deliveryVanNo: rawVanNo,
         standard,
         certBody,
         poReference,
@@ -646,6 +662,10 @@ export async function parseExcelFile(
     group.allLines.push(rowArray);
 
     if (rawContactPerson && !group.contactPerson) group.contactPerson = rawContactPerson;
+    if (rawCustAddr && !group.customerAddress) group.customerAddress = rawCustAddr;
+    if (rawDelivAddr && !group.deliveryAddress) group.deliveryAddress = rawDelivAddr;
+    if (rawDelivComp && !group.deliverToCompany) group.deliverToCompany = rawDelivComp;
+    if (rawVanNo && !group.deliveryVanNo) group.deliveryVanNo = rawVanNo;
 
     if (tcReqDate && !group.tcRequestDate) group.tcRequestDate = tcReqDate;
     if (recCommDate && !group.receivedCommercialDocDate) group.receivedCommercialDocDate = recCommDate;
@@ -850,7 +870,11 @@ export async function parseExcelFile(
         deliveryQuantity: finalDelivQ,
         balanceQuantity: finalBalQ,
         productDescription: 'TRANSACTION CERTIFICATE COST',
-        factoryUnit: 'Mainetti Sourcing Facility',
+        factoryUnit: group.customerAddress || 'Mainetti Sourcing Facility',
+        customerAddress: group.customerAddress,
+        deliveryAddress: group.deliveryAddress || group.customerAddress,
+        deliverToCompany: group.deliverToCompany,
+        deliveryVanNo: group.deliveryVanNo,
         poReference: group.poReference,
         season: 'FY2026 / Active',
         notes: `Extracted from Excel (${file.name}) where Model/Description contains 'TRANSACTION CERTIFICATE COST'. Cost: $${group.tcCostSum} USD.`,

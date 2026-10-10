@@ -81,6 +81,10 @@ export interface PIData {
   lastDeliveryDate?: string;
   allChallanNumbers?: string[];
   deliveryCount?: number;
+  customerAddress?: string;
+  deliveryAddress?: string;
+  deliverToCompany?: string;
+  deliveryVanNo?: string;
 
   // New TC-Related Workflow Fields
   tcRequestDate?: string;
@@ -151,21 +155,164 @@ export function isCancelledOrder(item?: Partial<PIData> | null): boolean {
 }
 
 /**
+ * Robust date parser supporting YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, DD-MMM-YYYY, and Excel serial numbers.
+ * Always normalizes to UTC midnight for exact calendar-day diffing.
+ */
+export function parseSmartDate(val?: any): Date | null {
+  if (val === null || val === undefined) return null;
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return null;
+    return new Date(Date.UTC(val.getFullYear(), val.getMonth(), val.getDate()));
+  }
+
+  if (typeof val === 'number') {
+    if (val > 20000 && val < 80000) {
+      const utcMs = Math.round((val - 25569) * 86400 * 1000);
+      const d = new Date(utcMs);
+      if (!isNaN(d.getTime())) {
+        return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+      }
+    }
+    return null;
+  }
+
+  const str = String(val).trim();
+  if (!str || str === '-' || str.toLowerCase() === 'n/a' || str.toLowerCase() === 'pending') {
+    return null;
+  }
+
+  // 1. Check numeric Excel serial string (e.g. "46290")
+  if (/^\d{5}(\.\d+)?$/.test(str)) {
+    const num = parseFloat(str);
+    if (num > 20000 && num < 80000) {
+      const utcMs = Math.round((num - 25569) * 86400 * 1000);
+      const d = new Date(utcMs);
+      if (!isNaN(d.getTime())) {
+        return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+      }
+    }
+  }
+
+  // 2. Check YYYY-MM-DD or YYYY/MM/DD or YYYY.MM.DD
+  const isoMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (isoMatch) {
+    const year = parseInt(isoMatch[1], 10);
+    const month = parseInt(isoMatch[2], 10);
+    const day = parseInt(isoMatch[3], 10);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return new Date(Date.UTC(year, month - 1, day));
+    }
+  }
+
+  // 3. Check DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+  const dmyMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);
+  if (dmyMatch) {
+    const p1 = parseInt(dmyMatch[1], 10);
+    const p2 = parseInt(dmyMatch[2], 10);
+    let year = parseInt(dmyMatch[3], 10);
+    if (year < 100) year += 2000;
+
+    let day = p1;
+    let month = p2;
+    if (p1 <= 12 && p2 > 12) {
+      month = p1;
+      day = p2;
+    }
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return new Date(Date.UTC(year, month - 1, day));
+    }
+  }
+
+  // 4. Fallback for text dates like "15-Aug-2026" or "Oct 5, 2026"
+  const fallback = new Date(str);
+  if (!isNaN(fallback.getTime())) {
+    return new Date(Date.UTC(fallback.getFullYear(), fallback.getMonth(), fallback.getDate()));
+  }
+
+  return null;
+}
+
+/**
+ * Normalizes any valid date input into standard YYYY-MM-DD string, or returns '' if empty/invalid.
+ */
+export function normalizeDateStr(val?: any): string {
+  if (val === null || val === undefined) return '';
+  const str = String(val).trim();
+  if (!str || str === '-') return '';
+  const parsed = parseSmartDate(val);
+  if (!parsed) return str;
+  return parsed.toISOString().slice(0, 10);
+}
+
+/**
+ * Calculates exact calendar days between two date strings (startStr -> endStr).
+ */
+export function getDaysBetweenDates(startStr?: string, endStr?: string): number | null {
+  const start = parseSmartDate(startStr);
+  const end = parseSmartDate(endStr);
+  if (!start || !end) return null;
+  const diffDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.max(0, diffDays);
+}
+
+/**
+ * Calculates exact calendar days from a given date string to Today.
+ */
+export function getDaysFromDateToToday(dateStr?: string): number | null {
+  const start = parseSmartDate(dateStr);
+  if (!start) return null;
+  const now = new Date();
+  const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.round((todayUtc - start.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.max(0, diffDays);
+}
+
+export interface DraftConfirmDaysInfo {
+  days: number | null;
+  isConfirmed: boolean;
+  label: string;
+}
+
+/**
+ * Calculates how many days elapsed from Draft TC Date until Draft Confirmation Date
+ * (or until Today if confirmation has not arrived yet).
+ */
+export function getDraftToConfirmDays(item: Partial<PIData>): DraftConfirmDaysInfo {
+  const hasDraftTc = !!(item.draftTcDate && item.draftTcDate.trim() && item.draftTcDate.trim() !== '-');
+  const hasDraftConf = !!(
+    item.draftConfirmationDate &&
+    item.draftConfirmationDate.trim() &&
+    item.draftConfirmationDate.trim() !== '-'
+  );
+
+  if (!hasDraftTc) {
+    return { days: null, isConfirmed: false, label: '-' };
+  }
+
+  if (hasDraftConf) {
+    const days = getDaysBetweenDates(item.draftTcDate, item.draftConfirmationDate);
+    return {
+      days,
+      isConfirmed: true,
+      label: days !== null ? `${days} ${days === 1 ? 'Day' : 'Days'}` : '-',
+    };
+  }
+
+  const waitingDays = getDaysFromDateToToday(item.draftTcDate);
+  return {
+    days: waitingDays,
+    isConfirmed: false,
+    label: waitingDays !== null ? `${waitingDays} ${waitingDays === 1 ? 'Day' : 'Days'}` : '-',
+  };
+}
+
+/**
  * Calculate exact Age in Days from Order Date to Today (or fallback to stored age)
  */
 export function calculatePiAgeDays(orderDateStr?: string, fallbackAge?: number): number {
-  if (!orderDateStr || orderDateStr === '-' || orderDateStr.trim() === '') {
-    return fallbackAge || 0;
-  }
-  const orderDate = new Date(orderDateStr);
-  if (isNaN(orderDate.getTime())) {
-    return fallbackAge || 0;
-  }
-  const today = new Date();
-  const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
-  const orderUtc = Date.UTC(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate());
-  const diffDays = Math.floor((todayUtc - orderUtc) / (1000 * 60 * 60 * 24));
-  return diffDays >= 0 ? diffDays : (fallbackAge || 0);
+  const days = getDaysFromDateToToday(orderDateStr);
+  if (days !== null) return days;
+  return fallbackAge || 0;
 }
 
 /**
@@ -246,17 +393,12 @@ export interface ActionableStatusInfo {
 }
 
 function getDaysToNow(dateStr?: string): number | null {
-  if (!dateStr || !dateStr.trim()) return null;
-  const start = new Date(dateStr.trim().replace(/\//g, '-'));
-  if (isNaN(start.getTime())) return null;
-  const now = new Date();
-  const diffTime = now.getTime() - start.getTime();
-  const days = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  return Math.max(0, days);
+  return getDaysFromDateToToday(dateStr);
 }
 
 /**
- * Computes the exact operational step this PI is waiting for right now.
+ * Computes the exact operational step this PI is waiting for right now,
+ * prioritizing the latest reached workflow stage so skipped intermediate dates never show stale earlier stages.
  */
 export function computeActionableWaitingStatus(item: Partial<PIData>): ActionableStatusInfo {
   const hasFinalRec = !!(item.finalTcReceivedDate && item.finalTcReceivedDate.trim());
@@ -282,82 +424,27 @@ export function computeActionableWaitingStatus(item: Partial<PIData>): Actionabl
   const hasDraftConf = !!(item.draftConfirmationDate && item.draftConfirmationDate.trim());
   const hasFinalApply = !!(item.finalTcApplyDate && item.finalTcApplyDate.trim());
 
-  // Stage 0: Not Requested
-  if (!hasReq) {
-    return {
-      statusLabel: 'Waiting for TC Request',
-      stageCode: 'S0',
-      stageName: 'Initial Request',
-      actionText: 'Pending TC Request Submission to Factory',
-      badgeBg: 'bg-slate-100',
-      badgeText: 'text-slate-600',
-      badgeBorder: 'border-slate-300',
-      dotColor: 'bg-slate-400',
-      isCompleted: false,
-      isOverdue: false,
-      daysWaiting: null,
-    };
-  }
-
-  // Stage 1: Waiting for Commercial Document
-  if (!hasCommDoc) {
-    const days = getDaysToNow(item.tcRequestDate);
-    const isOver = days !== null && days > 4;
-    return {
-      statusLabel: days !== null ? `Waiting for Comm Doc (${days}d)` : 'Waiting for Comm Doc',
-      stageCode: 'S1',
-      stageName: 'Commercial Doc',
-      actionText: 'Waiting for Invoice / Shipping Documents from Factory',
-      badgeBg: isOver ? 'bg-red-50' : 'bg-amber-50',
-      badgeText: isOver ? 'text-red-800' : 'text-amber-800',
-      badgeBorder: isOver ? 'border-red-300' : 'border-amber-300',
-      dotColor: isOver ? 'bg-red-600' : 'bg-amber-600',
-      isCompleted: false,
-      isOverdue: isOver,
-      daysWaiting: days,
-    };
-  }
-
-  // Stage 2: Waiting for Draft TC from Certifier
-  if (!hasDraftTc) {
-    const days = getDaysToNow(item.receivedCommercialDocDate);
+  // Stage 5: Final TC Applied -> Waiting for Final TC Certificate Release
+  if (hasFinalApply) {
+    const days = getDaysToNow(item.finalTcApplyDate);
     const isOver = days !== null && days > 5;
     return {
-      statusLabel: days !== null ? `Waiting for Draft TC (${days}d)` : 'Waiting for Draft TC',
-      stageCode: 'S2',
-      stageName: 'Draft TC',
-      actionText: 'Waiting for Draft TC from Certification Body',
-      badgeBg: isOver ? 'bg-red-50' : 'bg-blue-50',
-      badgeText: isOver ? 'text-red-800' : 'text-blue-800',
-      badgeBorder: isOver ? 'border-red-300' : 'border-blue-300',
-      dotColor: isOver ? 'bg-red-600' : 'bg-blue-600',
+      statusLabel: days !== null ? `Waiting for Final Release (${days}d)` : 'Waiting for Final Release',
+      stageCode: 'S5',
+      stageName: 'Final TC Release',
+      actionText: 'Waiting for Final Certificate from Certification Body',
+      badgeBg: isOver ? 'bg-red-50' : 'bg-teal-50',
+      badgeText: isOver ? 'text-red-800' : 'text-teal-800',
+      badgeBorder: isOver ? 'border-red-300' : 'border-teal-300',
+      dotColor: isOver ? 'bg-red-600' : 'bg-teal-600',
       isCompleted: false,
       isOverdue: isOver,
       daysWaiting: days,
     };
   }
 
-  // Stage 3: Waiting for Draft Confirmation
-  if (!hasDraftConf) {
-    const days = getDaysToNow(item.draftTcDate);
-    const isOver = days !== null && days > 3;
-    return {
-      statusLabel: days !== null ? `Waiting for Confirmation (${days}d)` : 'Waiting for Confirmation',
-      stageCode: 'S3',
-      stageName: 'Draft Confirmation',
-      actionText: 'Pending Buyer / Internal Draft Approval',
-      badgeBg: isOver ? 'bg-red-50' : 'bg-purple-50',
-      badgeText: isOver ? 'text-red-800' : 'text-purple-800',
-      badgeBorder: isOver ? 'border-red-300' : 'border-purple-300',
-      dotColor: isOver ? 'bg-red-600' : 'bg-purple-600',
-      isCompleted: false,
-      isOverdue: isOver,
-      daysWaiting: days,
-    };
-  }
-
-  // Stage 4: Waiting for Final TC Application
-  if (!hasFinalApply) {
+  // Stage 4: Draft Confirmed -> Waiting for Final TC Application
+  if (hasDraftConf) {
     const days = getDaysToNow(item.draftConfirmationDate);
     const isOver = days !== null && days > 3;
     return {
@@ -375,21 +462,76 @@ export function computeActionableWaitingStatus(item: Partial<PIData>): Actionabl
     };
   }
 
-  // Stage 5: Waiting for Final TC Certificate Release
-  const days = getDaysToNow(item.finalTcApplyDate);
-  const isOver = days !== null && days > 5;
+  // Stage 3: Draft TC Done -> Waiting for Draft Confirmation
+  if (hasDraftTc) {
+    const days = getDaysToNow(item.draftTcDate);
+    const isOver = days !== null && days > 3;
+    return {
+      statusLabel: days !== null ? `Waiting for Confirmation (${days}d)` : 'Waiting for Confirmation',
+      stageCode: 'S3',
+      stageName: 'Draft Confirmation',
+      actionText: 'Pending Buyer / Internal Draft Approval',
+      badgeBg: isOver ? 'bg-red-50' : 'bg-purple-50',
+      badgeText: isOver ? 'text-red-800' : 'text-purple-800',
+      badgeBorder: isOver ? 'border-red-300' : 'border-purple-300',
+      dotColor: isOver ? 'bg-red-600' : 'bg-purple-600',
+      isCompleted: false,
+      isOverdue: isOver,
+      daysWaiting: days,
+    };
+  }
+
+  // Stage 2: Commercial Doc Received -> Waiting for Draft TC from Certifier
+  if (hasCommDoc) {
+    const days = getDaysToNow(item.receivedCommercialDocDate);
+    const isOver = days !== null && days > 5;
+    return {
+      statusLabel: days !== null ? `Waiting for Draft TC (${days}d)` : 'Waiting for Draft TC',
+      stageCode: 'S2',
+      stageName: 'Draft TC',
+      actionText: 'Waiting for Draft TC from Certification Body',
+      badgeBg: isOver ? 'bg-red-50' : 'bg-blue-50',
+      badgeText: isOver ? 'text-red-800' : 'text-blue-800',
+      badgeBorder: isOver ? 'border-red-300' : 'border-blue-300',
+      dotColor: isOver ? 'bg-red-600' : 'bg-blue-600',
+      isCompleted: false,
+      isOverdue: isOver,
+      daysWaiting: days,
+    };
+  }
+
+  // Stage 1: TC Requested -> Waiting for Commercial Document
+  if (hasReq) {
+    const days = getDaysToNow(item.tcRequestDate);
+    const isOver = days !== null && days > 4;
+    return {
+      statusLabel: days !== null ? `Waiting for Comm Doc (${days}d)` : 'Waiting for Comm Doc',
+      stageCode: 'S1',
+      stageName: 'Commercial Doc',
+      actionText: 'Waiting for Invoice / Shipping Documents from Factory',
+      badgeBg: isOver ? 'bg-red-50' : 'bg-amber-50',
+      badgeText: isOver ? 'text-red-800' : 'text-amber-800',
+      badgeBorder: isOver ? 'border-red-300' : 'border-amber-300',
+      dotColor: isOver ? 'bg-red-600' : 'bg-amber-600',
+      isCompleted: false,
+      isOverdue: isOver,
+      daysWaiting: days,
+    };
+  }
+
+  // Stage 0: Not Requested
   return {
-    statusLabel: days !== null ? `Waiting for Final Release (${days}d)` : 'Waiting for Final Release',
-    stageCode: 'S5',
-    stageName: 'Final TC Release',
-    actionText: 'Waiting for Final Certificate from Certification Body',
-    badgeBg: isOver ? 'bg-red-50' : 'bg-teal-50',
-    badgeText: isOver ? 'text-red-800' : 'text-teal-800',
-    badgeBorder: isOver ? 'border-red-300' : 'border-teal-300',
-    dotColor: isOver ? 'bg-red-600' : 'bg-teal-600',
+    statusLabel: 'Waiting for TC Request',
+    stageCode: 'S0',
+    stageName: 'Initial Request',
+    actionText: 'Pending TC Request Submission to Factory',
+    badgeBg: 'bg-slate-100',
+    badgeText: 'text-slate-600',
+    badgeBorder: 'border-slate-300',
+    dotColor: 'bg-slate-400',
     isCompleted: false,
-    isOverdue: isOver,
-    daysWaiting: days,
+    isOverdue: false,
+    daysWaiting: null,
   };
 }
 

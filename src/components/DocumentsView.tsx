@@ -4,6 +4,10 @@ import {
   getCommercialDocSync,
   saveCommercialDocSync,
   CommercialDocSyncData,
+  resolveCustomerAddress,
+  saveCustomerAddressOverride,
+  getCustomerAddressOverride,
+  isInvalidExtractedField,
 } from '../utils/commercialDocSync';
 import {
   getMainettiLogo,
@@ -255,8 +259,8 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
 
   // Multi-PI Selection State
   const [selectedPiIds, setSelectedPiIds] = useState<string[]>(() => {
-    // Default select first 1-3 PIs if available
-    return data.slice(0, 3).map((p) => p.id);
+    // Default select first 1 PI if available
+    return data.slice(0, 1).map((p) => p.id);
   });
 
   const [searchFilter, setSearchFilter] = useState('');
@@ -308,9 +312,11 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
     return `${d.getDate()}-${months[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}`;
   }, []);
 
-  // Selected PIs objects
+  // Selected PIs objects preserving selection order (most recently selected is last)
   const selectedPis = useMemo(() => {
-    return data.filter((p) => selectedPiIds.includes(p.id));
+    return selectedPiIds
+      .map((id) => data.find((p) => p.id === id))
+      .filter((p): p is PIData => Boolean(p));
   }, [data, selectedPiIds]);
 
   // Header State
@@ -369,22 +375,29 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
     setSignatureImage(defaultSig);
   };
   
-  // Addresses State
+  // Addresses State (Initialized from first selected PI)
   const [invoiceToCompany, setInvoiceToCompany] = useState<string>(() => {
-    const sync = getCommercialDocSync();
-    return sync?.invoiceToCompany || 'LIDA TEXTILE AND DYEING LIMITED';
+    const first = data[0];
+    if (first?.customer) return first.customer.trim().toUpperCase();
+    return 'LIDA TEXTILE AND DYEING LIMITED';
   });
   const [invoiceToAddress, setInvoiceToAddress] = useState<string>(() => {
-    const sync = getCommercialDocSync();
-    return sync?.invoiceToAddress || 'HOLDING-100/2, BLOCK-B, EAST CHANDORA, WARD-8, SOFIPUR, KALIAKOIR, BD-CGAZIPUR 1751, BANGLADESH';
+    const first = data[0];
+    return resolveCustomerAddress(first?.customer, first?.customerAddress || first?.factoryUnit);
   });
   const [deliverToCompany, setDeliverToCompany] = useState<string>(() => {
-    const sync = getCommercialDocSync();
-    return sync?.deliverToCompany || 'LIDA TEXTILE AND DYEING LIMITED';
+    const first = data[0];
+    if (first?.deliverToCompany || first?.customer) {
+      return (first.deliverToCompany || first.customer).trim().toUpperCase();
+    }
+    return 'LIDA TEXTILE AND DYEING LIMITED';
   });
   const [deliverToAddress, setDeliverToAddress] = useState<string>(() => {
-    const sync = getCommercialDocSync();
-    return sync?.deliverToAddress || 'HOLDING-100/2, BLOCK-B, EAST CHANDORA, WARD-8, SOFIPUR, KALIAKOIR, BD-CGAZIPUR 1751, BANGLADESH';
+    const first = data[0];
+    return resolveCustomerAddress(
+      first?.deliverToCompany || first?.customer,
+      first?.deliveryAddress || first?.customerAddress || first?.factoryUnit
+    );
   });
 
   // Line items state
@@ -397,30 +410,60 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
       return;
     }
 
-    const first = selectedPis[0];
-    if (first.buyer) setRetailer(first.buyer.toUpperCase());
+    // Use the most recently selected PI so clicking any PI immediately shows that PI's data
+    const activePi = selectedPis[selectedPis.length - 1] || selectedPis[0];
 
-    // Auto-pull PI-wise Last Delivery Challan Number from Delivery Report
-    if (first.lastChallanNumber) {
-      setChallanNumber(first.lastChallanNumber);
-    }
-    if (first.lastDeliveryDate) {
-      setDeliveryDate(first.lastDeliveryDate);
-    }
-    if (first.deliveryCount) {
-      setNoOfDelivery(`D-0${first.deliveryCount}`);
+    if (activePi.buyer) {
+      setRetailer(activePi.buyer.trim().toUpperCase());
     }
 
-    const sync = getCommercialDocSync();
-    if (sync?.invoiceToCompany) {
-      setInvoiceToCompany(sync.invoiceToCompany);
-      setInvoiceToAddress(sync.invoiceToAddress || invoiceToAddress);
-      setDeliverToCompany(sync.deliverToCompany || sync.invoiceToCompany);
-      setDeliverToAddress(sync.deliverToAddress || sync.invoiceToAddress || deliverToAddress);
-    } else if (first.customer) {
-      setInvoiceToCompany(first.customer.toUpperCase());
-      setDeliverToCompany(first.customer.toUpperCase());
+    // Auto-pull PI-wise Last Delivery Challan Number & Date from Delivery Report / PI data
+    if (activePi.lastChallanNumber) {
+      setChallanNumber(activePi.lastChallanNumber);
+    } else if (activePi.invoiceNumber) {
+      setChallanNumber(activePi.invoiceNumber);
     }
+
+    if (activePi.lastDeliveryDate) {
+      setDeliveryDate(activePi.lastDeliveryDate);
+    } else if (activePi.invoiceDate) {
+      setDeliveryDate(activePi.invoiceDate);
+    } else if (activePi.orderDate) {
+      setDeliveryDate(activePi.orderDate);
+    }
+
+    if (activePi.deliveryCount) {
+      setNoOfDelivery(`D-${String(activePi.deliveryCount).padStart(2, '0')}`);
+    } else {
+      setNoOfDelivery('D-01');
+    }
+
+    if (activePi.deliveryVanNo) {
+      setDeliveryVanNo(activePi.deliveryVanNo);
+    }
+
+    // Strictly populate Invoice To & Deliver To from the selected PI's Customer & Address
+    const custName = (activePi.customer || '').trim().toUpperCase();
+    const delivCompName = (activePi.deliverToCompany || activePi.customer || '').trim().toUpperCase();
+    const savedOverride = getCustomerAddressOverride(custName);
+
+    const nextInvCompany = custName || savedOverride?.invoiceToCompany || 'LIDA TEXTILE AND DYEING LIMITED';
+    const nextInvAddress = resolveCustomerAddress(
+      custName,
+      activePi.customerAddress || activePi.factoryUnit
+    );
+    const nextDelivCompany = delivCompName || savedOverride?.deliverToCompany || nextInvCompany;
+    const nextDelivAddress =
+      savedOverride?.deliverToAddress ||
+      resolveCustomerAddress(
+        delivCompName,
+        activePi.deliveryAddress || activePi.customerAddress || activePi.factoryUnit
+      );
+
+    setInvoiceToCompany(nextInvCompany);
+    setInvoiceToAddress(nextInvAddress);
+    setDeliverToCompany(nextDelivCompany);
+    setDeliverToAddress(nextDelivAddress);
 
     // Extract all products from the selected PIs (skipping TC Cost)
     const newItems = extractProductItemsFromPis(selectedPis);
@@ -429,11 +472,24 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
 
   const handleManualSyncCommercialDoc = () => {
     const sync = getCommercialDocSync();
+    const activePi = selectedPis[selectedPis.length - 1] || selectedPis[0];
     if (sync) {
-      if (sync.invoiceToCompany) setInvoiceToCompany(sync.invoiceToCompany);
-      if (sync.invoiceToAddress) setInvoiceToAddress(sync.invoiceToAddress);
-      if (sync.deliverToCompany) setDeliverToCompany(sync.deliverToCompany);
-      if (sync.deliverToAddress) setDeliverToAddress(sync.deliverToAddress);
+      if (sync.invoiceToCompany && !isInvalidExtractedField(sync.invoiceToCompany)) {
+        setInvoiceToCompany(sync.invoiceToCompany);
+      } else if (activePi?.customer) {
+        setInvoiceToCompany(activePi.customer.trim().toUpperCase());
+      }
+      if (sync.invoiceToAddress && !isInvalidExtractedField(sync.invoiceToAddress)) {
+        setInvoiceToAddress(sync.invoiceToAddress);
+      }
+      if (sync.deliverToCompany && !isInvalidExtractedField(sync.deliverToCompany)) {
+        setDeliverToCompany(sync.deliverToCompany);
+      } else if (activePi?.customer) {
+        setDeliverToCompany(activePi.customer.trim().toUpperCase());
+      }
+      if (sync.deliverToAddress && !isInvalidExtractedField(sync.deliverToAddress)) {
+        setDeliverToAddress(sync.deliverToAddress);
+      }
       const newItems = extractProductItemsFromPis(selectedPis);
       setItems(newItems);
     }
@@ -451,11 +507,25 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
     return selectedPis.map((p) => p.piNumber).join(', ');
   }, [selectedPis]);
 
-  // Toggle selection
+  // Toggle selection (if clicking a PI of a different customer, switch directly to that PI so its data shows cleanly)
   const handleTogglePi = (id: string) => {
-    setSelectedPiIds((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-    );
+    const clickedPi = data.find((p) => p.id === id);
+    setSelectedPiIds((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((i) => i !== id);
+      }
+      if (clickedPi && prev.length > 0) {
+        const lastId = prev[prev.length - 1];
+        const lastPi = data.find((p) => p.id === lastId);
+        const clickedCust = (clickedPi.customer || '').trim().toUpperCase();
+        const lastCust = (lastPi?.customer || '').trim().toUpperCase();
+        // If user selects a PI belonging to a different customer, switch directly to this PI
+        if (clickedCust && lastCust && clickedCust !== lastCust) {
+          return [id];
+        }
+      }
+      return [...prev, id];
+    });
   };
 
   const handleSelectAllFiltered = () => {
@@ -1140,7 +1210,14 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
                 <input
                   type="text"
                   value={invoiceToCompany}
-                  onChange={(e) => setInvoiceToCompany(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setInvoiceToCompany(val);
+                    const activePi = selectedPis[selectedPis.length - 1] || selectedPis[0];
+                    if (activePi?.customer) {
+                      saveCustomerAddressOverride(activePi.customer, { invoiceToCompany: val });
+                    }
+                  }}
                   className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xs px-2 py-1 font-semibold text-slate-800"
                 />
               </div>
@@ -1151,19 +1228,33 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
                 <textarea
                   rows={2}
                   value={invoiceToAddress}
-                  onChange={(e) => setInvoiceToAddress(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setInvoiceToAddress(val);
+                    const activePi = selectedPis[selectedPis.length - 1] || selectedPis[0];
+                    if (activePi?.customer) {
+                      saveCustomerAddressOverride(activePi.customer, { invoiceToAddress: val });
+                    }
+                  }}
                   className="w-full text-[11px] bg-slate-50 border border-slate-200 rounded-xs px-2 py-1 text-slate-700"
                 />
               </div>
               <div className="flex items-center justify-between pt-1">
                 <span className="text-[10px] font-semibold text-slate-600 uppercase">
-                  Deliver To Address
+                  Deliver To Company & Address
                 </span>
                 <button
                   type="button"
                   onClick={() => {
                     setDeliverToCompany(invoiceToCompany);
                     setDeliverToAddress(invoiceToAddress);
+                    const activePi = selectedPis[selectedPis.length - 1] || selectedPis[0];
+                    if (activePi?.customer) {
+                      saveCustomerAddressOverride(activePi.customer, {
+                        deliverToCompany: invoiceToCompany,
+                        deliverToAddress: invoiceToAddress,
+                      });
+                    }
                   }}
                   className="text-[10px] text-blue-700 hover:underline cursor-pointer"
                 >
@@ -1173,13 +1264,27 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
               <input
                 type="text"
                 value={deliverToCompany}
-                onChange={(e) => setDeliverToCompany(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDeliverToCompany(val);
+                  const activePi = selectedPis[selectedPis.length - 1] || selectedPis[0];
+                  if (activePi?.customer) {
+                    saveCustomerAddressOverride(activePi.customer, { deliverToCompany: val });
+                  }
+                }}
                 className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xs px-2 py-1 font-semibold text-slate-800"
               />
               <textarea
                 rows={2}
                 value={deliverToAddress}
-                onChange={(e) => setDeliverToAddress(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDeliverToAddress(val);
+                  const activePi = selectedPis[selectedPis.length - 1] || selectedPis[0];
+                  if (activePi?.customer) {
+                    saveCustomerAddressOverride(activePi.customer, { deliverToAddress: val });
+                  }
+                }}
                 className="w-full text-[11px] bg-slate-50 border border-slate-200 rounded-xs px-2 py-1 text-slate-700"
               />
             </div>

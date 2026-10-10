@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { PIData, TCStatus, computeAutomatedTcStatus, computeActionableWaitingStatus } from '../types/tc';
+import {
+  PIData,
+  TCStatus,
+  computeAutomatedTcStatus,
+  computeActionableWaitingStatus,
+  getDraftToConfirmDays,
+} from '../types/tc';
 import {
   X,
   Building2,
@@ -56,7 +62,11 @@ export const PiDetailDrawer: React.FC<PiDetailDrawerProps> = ({
       setRecCommDocDate(pi.receivedCommercialDocDate || '');
       setDraftTcDate(pi.draftTcDate || '');
       setDraftConfDate(pi.draftConfirmationDate || '');
-      setRevQty(pi.revisionQty !== undefined && pi.revisionQty > 0 ? String(pi.revisionQty) : '');
+      const cleanRev =
+        pi.revisionQty !== undefined && pi.revisionQty > 0 && pi.revisionQty <= 20
+          ? String(pi.revisionQty)
+          : '';
+      setRevQty(cleanRev);
       setFinalApplyDate(pi.finalTcApplyDate || '');
       setFinalRecDate(pi.finalTcReceivedDate || '');
       setTcNum(pi.tcNumber || '');
@@ -464,22 +474,42 @@ export const PiDetailDrawer: React.FC<PiDetailDrawerProps> = ({
                 </div>
               </div>
 
-              {/* 5. Revision Qty */}
+              {/* 5. Draft TC to Confirmation Days (Auto Calculated) */}
               <div>
                 <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                  5. Revision Qty (If revised)
+                  5. Draft to Confirm Days (Auto)
                 </label>
-                <input
-                  type="number"
-                  placeholder="e.g. 15000"
-                  value={revQty}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setRevQty(val);
-                    applyWorkflowUpdate({ revisionQty: val ? Number(val) : undefined });
-                  }}
-                  className="w-full py-1 px-2 border border-slate-300 rounded-xs text-xs font-mono focus:border-blue-600 focus:outline-none"
-                />
+                {(() => {
+                  const confirmInfo = getDraftToConfirmDays({
+                    draftTcDate: draftTcDate || undefined,
+                    draftConfirmationDate: draftConfDate || undefined,
+                  });
+                  if (confirmInfo.days === null) {
+                    return (
+                      <div className="w-full py-1.5 px-2.5 border border-dashed border-slate-300 bg-slate-50 rounded-xs text-xs font-mono text-slate-400">
+                        Set Draft TC Date to calculate days
+                      </div>
+                    );
+                  }
+                  if (confirmInfo.isConfirmed) {
+                    return (
+                      <div className="w-full py-1.5 px-2.5 border border-emerald-300 bg-emerald-50 rounded-xs text-xs font-mono font-bold text-emerald-900 flex items-center justify-between">
+                        <span>{confirmInfo.label}</span>
+                        <span className="text-[10px] font-sans font-semibold bg-emerald-200/70 text-emerald-900 px-1.5 py-0.2 rounded-xs">
+                          Confirmed
+                        </span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="w-full py-1.5 px-2.5 border border-purple-300 bg-purple-50 rounded-xs text-xs font-mono font-bold text-purple-900 flex items-center justify-between">
+                      <span>{confirmInfo.label}</span>
+                      <span className="text-[10px] font-sans font-semibold bg-purple-200/70 text-purple-900 px-1.5 py-0.2 rounded-xs">
+                        Waiting Confirm
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* 6. Final TC Apply Date */}

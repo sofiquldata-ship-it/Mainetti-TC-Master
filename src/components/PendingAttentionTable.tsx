@@ -5,6 +5,7 @@ import {
   computeAutomatedTcStatus,
   computeActionableWaitingStatus,
   calculatePiAgeDays,
+  getDraftToConfirmDays,
   isCancelledStatus,
   isCancelledOrder,
   isCancelledPi,
@@ -56,6 +57,7 @@ type SortField =
   | 'receivedCommercialDocDate'
   | 'draftTcDate'
   | 'draftConfirmationDate'
+  | 'draftConfirmDays'
   | 'revisionQty'
   | 'finalTcApplyDate'
   | 'finalTcReceivedDate'
@@ -273,6 +275,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
       } else if (sortField === 'balanceQuantity') {
         valA = getQty(a, 'bal');
         valB = getQty(b, 'bal');
+      } else if (sortField === 'draftConfirmDays' || sortField === 'revisionQty') {
+        valA = getDraftToConfirmDays(a).days ?? -1;
+        valB = getDraftToConfirmDays(b).days ?? -1;
       } else if (sortField === 'tcStatus') {
         valA = computeAutomatedTcStatus(a);
         valB = computeAutomatedTcStatus(b);
@@ -750,14 +755,15 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                 </div>
               </th>
 
-              {/* 13. REVISION QTY - FROZEN TOP */}
+              {/* 13. DRAFT TO CONFIRMATION DAYS - FROZEN TOP */}
               <th
-                onClick={() => handleSort('revisionQty')}
-                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-right sticky top-0 z-30 bg-[#0b1b3d]"
+                onClick={() => handleSort('draftConfirmDays')}
+                className="py-1.5 px-2.5 cursor-pointer hover:bg-[#132c5e] transition-colors border-r border-[#1a386b] whitespace-nowrap text-center sticky top-0 z-30 bg-[#0b1b3d]"
+                title="Days from Draft TC Date until Draft Confirmation Date (or Today if still waiting)"
               >
-                <div className="flex items-center justify-end gap-1">
-                  <span>Revision Qty</span>
-                  {renderSortIcon('revisionQty')}
+                <div className="flex items-center justify-center gap-1">
+                  <span>Draft Confirm Days</span>
+                  {renderSortIcon('draftConfirmDays')}
                 </div>
               </th>
 
@@ -1158,15 +1164,37 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                       {pi.draftConfirmationDate || <span className="text-slate-300">-</span>}
                     </td>
 
-                    {/* 13. REVISION QTY */}
-                    <td className="py-1.5 px-2.5 font-mono text-right whitespace-nowrap tabular-nums border-r border-slate-100">
-                      {pi.revisionQty && pi.revisionQty > 0 ? (
-                        <span className="font-bold text-amber-900 bg-amber-50 px-1 rounded-xs">
-                          {pi.revisionQty.toLocaleString()}
-                        </span>
-                      ) : (
-                        <span className="text-slate-300">-</span>
-                      )}
+                    {/* 13. DRAFT CONFIRMATION DAYS (From Draft TC Date to Confirmation Date / Today) */}
+                    <td className="py-1.5 px-2.5 font-mono text-center whitespace-nowrap tabular-nums border-r border-slate-100">
+                      {(() => {
+                        const info = getDraftToConfirmDays(pi);
+                        if (info.days === null) {
+                          return <span className="text-slate-300">-</span>;
+                        }
+                        if (info.isConfirmed) {
+                          return (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs"
+                              title={`Confirmed in ${info.days} ${info.days === 1 ? 'Day' : 'Days'} (Draft TC: ${pi.draftTcDate} → Confirmed: ${pi.draftConfirmationDate})`}
+                            >
+                              <span>{info.label}</span>
+                            </span>
+                          );
+                        }
+                        const isOverdueWait = info.days > 3;
+                        return (
+                          <span
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs text-[10px] font-bold border shadow-2xs ${
+                              isOverdueWait
+                                ? 'bg-red-50 text-red-800 border-red-300'
+                                : 'bg-purple-50 text-purple-800 border-purple-300'
+                            }`}
+                            title={`Waiting for Confirmation since Draft TC (${pi.draftTcDate}): ${info.days} ${info.days === 1 ? 'Day' : 'Days'}`}
+                          >
+                            <span>{info.label}</span>
+                          </span>
+                        );
+                      })()}
                     </td>
 
                     {/* 14. FINAL TC APPLY DATE */}
@@ -1250,11 +1278,19 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                 acc.totalDeliv += delivQ;
                 acc.totalBal += balQ;
                 acc.totalCost += item.tcCost;
-                if (item.revisionQty) acc.totalRev += item.revisionQty;
+                const confirmInfo = getDraftToConfirmDays(item);
+                if (confirmInfo.days !== null) {
+                  acc.confirmDaysSum += confirmInfo.days;
+                  acc.confirmDaysCount += 1;
+                }
                 return acc;
               },
-              { totalOrder: 0, totalDeliv: 0, totalBal: 0, totalCost: 0, totalRev: 0 }
+              { totalOrder: 0, totalDeliv: 0, totalBal: 0, totalCost: 0, confirmDaysSum: 0, confirmDaysCount: 0 }
             );
+            const avgConfirmDays =
+              totals.confirmDaysCount > 0
+                ? `${(totals.confirmDaysSum / totals.confirmDaysCount).toFixed(1)}d Avg`
+                : '-';
 
             return (
               <tfoot className="bg-[#0b1b3d] text-white font-mono text-[10px] font-bold border-t-2 border-[#132c5e] sticky bottom-0 z-30 shadow-[0_-2px_6px_rgba(0,0,0,0.25)]">
@@ -1282,9 +1318,9 @@ export const PendingAttentionTable: React.FC<PendingAttentionTableProps> = ({
                   <td colSpan={4} className="py-1.5 px-2.5 border-r border-[#1a386b] text-center text-slate-400 font-sans text-[10px]">
                     Workflow Stages
                   </td>
-                  {/* Revision Qty */}
-                  <td className="py-1.5 px-2.5 text-right tabular-nums text-amber-300 border-r border-[#1a386b]">
-                    {totals.totalRev > 0 ? totals.totalRev.toLocaleString() : '-'}
+                  {/* Draft Confirm Days Average */}
+                  <td className="py-1.5 px-2.5 text-center tabular-nums text-amber-300 border-r border-[#1a386b]">
+                    {avgConfirmDays}
                   </td>
                   {/* 3 Auto Determined Stage Columns */}
                   <td colSpan={3} className="py-1.5 px-2.5 text-right text-slate-300 font-sans text-[10px] border-r border-[#1a386b]">
