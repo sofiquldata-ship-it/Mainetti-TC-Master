@@ -657,14 +657,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
     const element = printRef.current;
     if (!element) return;
 
-    // First try native print
-    try {
-      window.print();
-      return;
-    } catch (e) {
-      console.warn('Native print failed, attempting html2canvas fallback');
-    }
-
+    // Try automated PDF generation
     setIsExportingPdf(true);
     try {
       const canvas = await html2canvas(element, {
@@ -695,10 +688,26 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
       const imgData = canvas.toDataURL('image/jpeg', 0.98);
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
-      pdf.save(docType === 'gate_pass' ? `Delivery_Challan.pdf` : `Supplier_Declaration.pdf`);
+      
+      const fileName = docType === 'gate_pass' ? `Delivery_Challan.pdf` : `Supplier_Declaration.pdf`;
+
+      try {
+        pdf.save(fileName);
+      } catch (saveErr) {
+        console.warn('Direct pdf.save failed, using blob URL fallback:', saveErr);
+        const blob = pdf.output('blob');
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
     } catch (error) {
       console.error('PDF export failed:', error);
-      alert('PDF export failed. Please use the "Print to PDF" option in the print dialog instead.');
+      alert('PDF export failed. Try using the "Print" button and selecting "Save as PDF" in the print dialog.');
     } finally {
       setIsExportingPdf(false);
     }
