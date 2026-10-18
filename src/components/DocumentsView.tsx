@@ -1538,13 +1538,6 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
                         >
                           <div className="flex items-center justify-center h-full">PKT/BOX</div>
                         </th>
-                        <th
-                          style={{ backgroundColor: '#fcd9be', verticalAlign: 'middle', height: '32px' }}
-                          className="border border-black p-0.5 w-16"
-                          rowSpan={2}
-                        >
-                          <div className="flex items-center justify-center h-full">BALANCE QTY</div>
-                        </th>
                       </tr>
                       <tr className="text-black font-bold text-center text-[7.5px]">
                         <th style={{ backgroundColor: '#fcd9be', verticalAlign: 'middle', height: '16px' }} className="border border-black p-0.5 w-8">WIDTH</th>
@@ -1584,7 +1577,6 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
                               title="Click to directly edit Packet / Box for this line"
                             />
                           </td>
-                          <td className="border border-black font-mono">{item.balanceQty}</td>
                         </tr>
                       ))}
 
@@ -1606,13 +1598,12 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
                           <td className="border border-black">&nbsp;</td>
                           <td className="border border-black">&nbsp;</td>
                           <td className="border border-black">&nbsp;</td>
-                          <td className="border border-black">&nbsp;</td>
                         </tr>
                       ))}
 
                       {/* TOTAL ROW */}
                       <tr className="bg-[#fcd9be] font-bold text-black border-t-2 border-black text-center h-[20px]">
-                        <td colSpan={7} className="border border-black text-center uppercase tracking-widest font-black text-[9px]">
+                        <td colSpan={6} className="border border-black text-center uppercase tracking-widest font-black text-[9px]">
                           TOTAL
                         </td>
                         <td className="border border-black text-right px-1 font-mono font-black text-[9px]">
@@ -1629,9 +1620,6 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
                             className="w-full h-full text-center bg-transparent border-0 outline-none p-0 font-mono font-black text-[9px] text-black focus:bg-white focus:ring-1 focus:ring-blue-600"
                             title="Total Packets (Auto-calculated from items, click to override)"
                           />
-                        </td>
-                        <td className="border border-black font-mono font-bold text-[9px]">
-                          -
                         </td>
                       </tr>
                     </tbody>
