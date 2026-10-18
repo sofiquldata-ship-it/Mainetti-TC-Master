@@ -1603,10 +1603,10 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
                           <td className="border border-black">&nbsp;</td>
                           <td className="border border-black">&nbsp;</td>
                           <td className="border border-black">&nbsp;</td>
-                          <td className="border border-black text-center text-slate-300">-</td>
-                          <td className="border border-black text-center text-slate-300">-</td>
-                          <td className="border border-black text-center text-slate-300">-</td>
-                          <td className="border border-black text-center text-slate-300">-</td>
+                          <td className="border border-black">&nbsp;</td>
+                          <td className="border border-black">&nbsp;</td>
+                          <td className="border border-black">&nbsp;</td>
+                          <td className="border border-black">&nbsp;</td>
                         </tr>
                       ))}
 
