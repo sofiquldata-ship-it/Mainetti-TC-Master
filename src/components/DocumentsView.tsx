@@ -655,110 +655,50 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
   const handleDownloadPdf = async () => {
     const targetId = docType === 'gate_pass' ? 'printable-challan-sheet' : 'printable-declaration-sheet';
     const element = printRef.current;
-    if (!element) {
-      console.warn('PDF export target element not found');
+    if (!element) return;
+
+    // First try native print
+    try {
+      window.print();
       return;
+    } catch (e) {
+      console.warn('Native print failed, attempting html2canvas fallback');
     }
 
+    setIsExportingPdf(true);
     try {
-      setIsExportingPdf(true);
-
-      // Pre-clone or configure html2canvas for max fidelity & cross-browser support
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
         allowTaint: true,
         logging: false,
         backgroundColor: '#ffffff',
-        width: 794,
-        height: 1123,
-        windowWidth: 1200,
-        windowHeight: 1400,
         onclone: (clonedDoc) => {
           const clonedTarget = clonedDoc.getElementById(targetId);
           if (!clonedTarget) return;
 
-          // Force exact A4 dimensions and clean borders on the cloned sheet
+          // Force exact A4 dimensions
           clonedTarget.style.width = '794px';
-          clonedTarget.style.minWidth = '794px';
-          clonedTarget.style.maxWidth = '794px';
           clonedTarget.style.height = '1123px';
-          clonedTarget.style.minHeight = '1123px';
-          clonedTarget.style.maxHeight = '1123px';
-          clonedTarget.style.padding = '36px 36px';
+          clonedTarget.style.padding = '36px';
           clonedTarget.style.boxSizing = 'border-box';
-          clonedTarget.style.border = 'none';
-          clonedTarget.style.boxShadow = 'none';
-          clonedTarget.style.transform = 'none';
-          clonedTarget.style.margin = '0 auto';
-
-          // Reset parent elements to prevent horizontal overflow or flex shifting
-          let parent = clonedTarget.parentElement;
-          while (parent && parent !== clonedDoc.body) {
-            parent.style.padding = '0';
-            parent.style.margin = '0';
-            parent.style.overflow = 'visible';
-            parent.style.width = '794px';
-            parent.style.minWidth = '794px';
-            parent.style.maxWidth = '794px';
-            parent.style.display = 'block';
-            parent.style.boxShadow = 'none';
-            parent.style.background = '#ffffff';
-            parent = parent.parentElement;
-          }
-
-          // Replace input elements in the table with crisp text
-          const inputs = clonedTarget.querySelectorAll('input');
-          inputs.forEach((inp) => {
-            const span = clonedDoc.createElement('span');
-            span.textContent = inp.value || inp.placeholder || '-';
-            span.className = inp.className;
-            span.style.border = 'none';
-            span.style.background = 'transparent';
-            span.style.display = 'inline-block';
-            span.style.width = '100%';
-            span.style.textAlign = 'center';
-            inp.parentNode?.replaceChild(span, inp);
+          
+          // Remove oklch/modern CSS that html2canvas cannot parse
+          const all = clonedTarget.querySelectorAll('*');
+          all.forEach((el: any) => {
+            if (el.style.backgroundColor?.includes('oklch')) el.style.backgroundColor = '#ffffff';
+            if (el.style.color?.includes('oklch')) el.style.color = '#000000';
           });
         },
       });
 
       const imgData = canvas.toDataURL('image/jpeg', 0.98);
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      });
-
-      // Fit edge-to-edge on standard A4 page (210 x 297 mm) with zero offset margins
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
-      
-      const fileName = docType === 'gate_pass'
-        ? `Delivery_Challan_${challanNumber || 'Mainetti'}_${deliveryDate || 'Date'}.pdf`
-        : `Supplier_Declaration_${challanNumber || 'Mainetti'}_${deliveryDate || 'Date'}.pdf`;
-
-      // Method 1: standard jsPDF save
-      try {
-        pdf.save(fileName);
-      } catch (saveErr) {
-        // Fallback for iframe/browser sandbox restrictions: Blob anchor trigger
-        console.warn('Direct pdf.save failed, using blob URL fallback:', saveErr);
-        const blob = pdf.output('blob');
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => {
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }, 1500);
-      }
+      pdf.save(docType === 'gate_pass' ? `Delivery_Challan.pdf` : `Supplier_Declaration.pdf`);
     } catch (error) {
       console.error('PDF export failed:', error);
-      // Fallback: trigger print dialog directly if download fails
-      window.print();
+      alert('PDF export failed. Please use the "Print to PDF" option in the print dialog instead.');
     } finally {
       setIsExportingPdf(false);
     }
