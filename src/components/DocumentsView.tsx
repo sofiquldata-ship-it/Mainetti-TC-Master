@@ -661,7 +661,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
     setIsExportingPdf(true);
     try {
       const canvas = await html2canvas(element, {
-        scale: 2,
+        scale: 3,
         useCORS: true,
         allowTaint: true,
         logging: false,
@@ -675,10 +675,12 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({ data }) => {
           clonedTarget.style.height = '1123px';
           clonedTarget.style.padding = '36px';
           clonedTarget.style.boxSizing = 'border-box';
+          clonedTarget.style.fontFamily = 'Arial, sans-serif';
           
-          // Remove oklch/modern CSS that html2canvas cannot parse
+          // Remove oklch/modern CSS that html2canvas cannot parse and force Arial
           const all = clonedTarget.querySelectorAll('*');
           all.forEach((el: any) => {
+            el.style.fontFamily = 'Arial, sans-serif';
             if (el.style.backgroundColor?.includes('oklch')) el.style.backgroundColor = '#ffffff';
             if (el.style.color?.includes('oklch')) el.style.color = '#000000';
           });
