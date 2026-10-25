@@ -755,6 +755,7 @@ export default function App() {
               googleUser={googleUser}
               googleAccessToken={googleAccessToken}
               linkedSheet={linkedSheet}
+              databaseTcList={piList}
             />
           ) : piList.length === 0 ? (
             /* Empty State when no data has been uploaded yet */

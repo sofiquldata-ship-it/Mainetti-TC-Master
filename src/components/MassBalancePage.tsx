@@ -33,6 +33,8 @@ import {
   LinkedSheetConfig,
 } from '../utils/googleSheetsService';
 import { googleSignIn, getAccessToken } from '../utils/googleAuth';
+import { PIData } from '../types/tc';
+import { loadFromPersistentStorage } from '../utils/excelParser';
 
 
 export interface PurchaseTCBatch {
@@ -56,6 +58,7 @@ export interface MassBalanceLedgerEntry {
   soldQty: number;
   pendingSoldQty: number;
   soldTc: string;
+  buyer?: string;
   status: 'Certified' | 'Pending';
 }
 
@@ -171,6 +174,7 @@ export interface MassBalancePageProps {
   googleUser?: any | null;
   googleAccessToken?: string | null;
   linkedSheet?: LinkedSheetConfig | null;
+  databaseTcList?: PIData[];
 }
 
 export const MassBalancePage: React.FC<MassBalancePageProps> = ({
@@ -178,6 +182,7 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
   googleUser,
   googleAccessToken,
   linkedSheet: propLinkedSheet,
+  databaseTcList,
 }) => {
   // Loss Rate setting
   const [lossRate, setLossRate] = useState<number>(() => {
@@ -307,6 +312,7 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [standardFilter, setStandardFilter] = useState<'ALL' | 'RCS' | 'GRS'>('ALL');
   const [purchaseTcFilter, setPurchaseTcFilter] = useState<string>('ALL');
+  const [soldTcFilter, setSoldTcFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'Certified' | 'Pending'>('ALL');
 
   // Form states: Add Purchase TC
@@ -342,6 +348,76 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
     return purchaseLedger.find((p) => p.tcNo === selectedSourceTc) || purchaseLedger[0] || null;
   }, [purchaseLedger, selectedSourceTc]);
 
+  // Extract all unique valid TC numbers from the database (PI list) and existing ledger
+  const availableDatabaseTcs = useMemo(() => {
+    const list: Array<{
+      tcNumber: string;
+      buyer?: string;
+      customer?: string;
+      invoiceNumber?: string;
+      piNumber?: string;
+      standard?: string;
+    }> = [];
+
+    const seen = new Set<string>();
+
+    // 1. From databaseTcList or persistent storage
+    let sourceData = databaseTcList || [];
+    if (!sourceData || sourceData.length === 0) {
+      try {
+        const saved = loadFromPersistentStorage();
+        if (saved && saved.data) {
+          sourceData = saved.data;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    if (sourceData && sourceData.length > 0) {
+      sourceData.forEach((item) => {
+        const tc = item.tcNumber?.trim();
+        if (tc && tc !== '' && tc !== 'Not Requested' && !seen.has(tc.toLowerCase())) {
+          seen.add(tc.toLowerCase());
+          list.push({
+            tcNumber: tc,
+            buyer: item.buyer || '',
+            customer: item.customer || '',
+            invoiceNumber: item.invoiceNumber || item.piNumber || '',
+            piNumber: item.piNumber || '',
+            standard: item.standard || 'GRS',
+          });
+        }
+      });
+    }
+
+    // 2. From existing ledger rows
+    ledgerData.forEach((row) => {
+      const tc = row.soldTc?.trim();
+      if (tc && tc !== '' && !seen.has(tc.toLowerCase())) {
+        seen.add(tc.toLowerCase());
+        list.push({
+          tcNumber: tc,
+          buyer: row.buyer || '',
+          standard: row.standard || 'RCS',
+        });
+      }
+    });
+
+    return list;
+  }, [databaseTcList, ledgerData]);
+
+  // Unique Sold TCs currently present in the ledger (for toolbar filter)
+  const uniqueSoldTcsInLedger = useMemo(() => {
+    const set = new Set<string>();
+    ledgerData.forEach((r) => {
+      if (r.soldTc && r.soldTc.trim() !== '') {
+        set.add(r.soldTc.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [ledgerData]);
+
   // Real-time calculation for output modal
   const liveCalc = useMemo(() => {
     const outQty = parseFloat(userOutputQty) || 0;
@@ -371,15 +447,22 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
         !q ||
         r.purchaseTc.toLowerCase().includes(q) ||
         r.lotNo.toLowerCase().includes(q) ||
-        (r.soldTc && r.soldTc.toLowerCase().includes(q));
+        (r.soldTc && r.soldTc.toLowerCase().includes(q)) ||
+        (r.buyer && r.buyer.toLowerCase().includes(q));
 
       const matchStd = standardFilter === 'ALL' || r.standard === standardFilter;
       const matchTC = purchaseTcFilter === 'ALL' || r.purchaseTc === purchaseTcFilter;
+      const matchSoldTc =
+        soldTcFilter === 'ALL'
+          ? true
+          : soldTcFilter === 'PENDING'
+          ? !r.soldTc || r.soldTc.trim() === '' || r.status === 'Pending'
+          : r.soldTc === soldTcFilter;
       const matchStatus = statusFilter === 'ALL' || r.status === statusFilter;
 
-      return matchSearch && matchStd && matchTC && matchStatus;
+      return matchSearch && matchStd && matchTC && matchSoldTc && matchStatus;
     });
-  }, [ledgerData, searchQuery, standardFilter, purchaseTcFilter, statusFilter]);
+  }, [ledgerData, searchQuery, standardFilter, purchaseTcFilter, soldTcFilter, statusFilter]);
 
   // Overall KPI metrics
   const kpis = useMemo(() => {
@@ -476,6 +559,10 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
     const soldQtyVal = isIssued ? outQty : 0.0;
     const pendingSoldQtyVal = isIssued ? 0.0 : outQty;
 
+    const matchedDbTc = availableDatabaseTcs.find(
+      (t) => t.tcNumber.toLowerCase() === cleanSoldTc.toLowerCase()
+    );
+
     const newEntry: MassBalanceLedgerEntry = {
       id: Date.now(),
       purchaseTc: activeSourceTC.tcNo,
@@ -489,6 +576,7 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
       soldQty: soldQtyVal,
       pendingSoldQty: pendingSoldQtyVal,
       soldTc: cleanSoldTc,
+      buyer: matchedDbTc?.buyer || '',
       status: isIssued ? 'Certified' : 'Pending'
     };
 
@@ -519,6 +607,10 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
       return;
     }
 
+    const matchedDbTc = availableDatabaseTcs.find(
+      (t) => t.tcNumber.toLowerCase() === cleanSoldTc.toLowerCase()
+    );
+
     setLedgerData((prev) =>
       prev.map((item) =>
         item.id === assigningRow.id
@@ -527,6 +619,7 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
               soldTc: cleanSoldTc,
               soldQty: item.outputQty,
               pendingSoldQty: 0.0,
+              buyer: matchedDbTc?.buyer || item.buyer || '',
               status: 'Certified'
             }
           : item
@@ -947,6 +1040,21 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
                 ))}
               </select>
 
+              {/* Filter by Specific Sold TC */}
+              <select
+                value={soldTcFilter}
+                onChange={(e) => setSoldTcFilter(e.target.value)}
+                className="text-xs py-1.5 px-2 bg-white rounded-md border border-slate-300 text-slate-700 focus:ring-1 focus:ring-emerald-500 focus:outline-none font-mono"
+              >
+                <option value="ALL">All Sold TCs</option>
+                <option value="PENDING">Pending TC (Not Issued)</option>
+                {uniqueSoldTcsInLedger.map((tc) => (
+                  <option key={tc} value={tc}>
+                    Sold TC: {tc}
+                  </option>
+                ))}
+              </select>
+
               {/* Filter by TC Status */}
               <select
                 value={statusFilter}
@@ -1063,9 +1171,16 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
 
                       <td className="py-2 px-2.5 font-sans">
                         {row.soldTc ? (
-                          <span className="font-mono text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                            {row.soldTc}
-                          </span>
+                          <div className="flex flex-col items-start gap-0.5">
+                            <span className="font-mono text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                              {row.soldTc}
+                            </span>
+                            {row.buyer && (
+                              <span className="text-[9px] text-slate-500 font-sans truncate max-w-[120px]" title={row.buyer}>
+                                {row.buyer}
+                              </span>
+                            )}
+                          </div>
                         ) : (
                           <button
                             type="button"
@@ -1359,13 +1474,58 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
                       Faka rakhle automatic "Pending TC"-te jabe
                     </span>
                   </div>
+                  {/* Database TC Quick Selector */}
+                  {availableDatabaseTcs.length > 0 && (
+                    <div className="mb-2">
+                      <label className="block text-[11px] font-medium text-emerald-800 mb-0.5">
+                        Database Theke Select Korun ({availableDatabaseTcs.length} TCs):
+                      </label>
+                      <select
+                        value={userSoldTC}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setUserSoldTC(val);
+                          const found = availableDatabaseTcs.find((t) => t.tcNumber === val);
+                          if (found && found.invoiceNumber && !userLotRef) {
+                            setUserLotRef(found.invoiceNumber);
+                          }
+                        }}
+                        className="w-full text-xs py-1.5 px-2.5 rounded-lg border border-emerald-300 bg-emerald-50/70 text-emerald-900 font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                      >
+                        <option value="">-- Choose from Database TC List (or type below) --</option>
+                        {availableDatabaseTcs.map((item) => (
+                          <option key={item.tcNumber} value={item.tcNumber}>
+                            {item.tcNumber} {item.buyer ? `— ${item.buyer}` : ''} {item.invoiceNumber ? `(${item.invoiceNumber})` : ''} [{item.standard}]
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
                   <input
                     type="text"
-                    placeholder="e.g. CUC-04754082 (Leave empty if not applied yet)"
+                    list="database-sold-tc-list"
+                    placeholder="e.g. CUC-04754082 (Select above or type to search)"
                     value={userSoldTC}
-                    onChange={(e) => setUserSoldTC(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setUserSoldTC(val);
+                      const found = availableDatabaseTcs.find(
+                        (t) => t.tcNumber.toLowerCase() === val.toLowerCase()
+                      );
+                      if (found && found.invoiceNumber && !userLotRef) {
+                        setUserLotRef(found.invoiceNumber);
+                      }
+                    }}
                     className="w-full text-xs py-2 px-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
                   />
+                  <datalist id="database-sold-tc-list">
+                    {availableDatabaseTcs.map((t) => (
+                      <option key={t.tcNumber} value={t.tcNumber}>
+                        {t.tcNumber} - {t.buyer || t.customer || ''} {t.invoiceNumber ? `(${t.invoiceNumber})` : ''} [{t.standard}]
+                      </option>
+                    ))}
+                  </datalist>
                 </div>
 
                 <div>
@@ -1436,16 +1596,46 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
                   </strong>
                 </div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Enter Issued Sold TC Number <span className="text-rose-500">*</span>
+                  Select or Enter Issued Sold TC Number <span className="text-rose-500">*</span>
                 </label>
+
+                {/* Database TC Quick Selector */}
+                {availableDatabaseTcs.length > 0 && (
+                  <div className="mb-2">
+                    <label className="block text-[11px] font-medium text-emerald-800 mb-0.5">
+                      Database Theke Select Korun ({availableDatabaseTcs.length} TCs):
+                    </label>
+                    <select
+                      value={assignSoldTcInput}
+                      onChange={(e) => setAssignSoldTcInput(e.target.value)}
+                      className="w-full text-xs py-1.5 px-2.5 rounded-lg border border-emerald-300 bg-emerald-50/70 text-emerald-900 font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    >
+                      <option value="">-- Choose from Database TC List (or type below) --</option>
+                      {availableDatabaseTcs.map((item) => (
+                        <option key={item.tcNumber} value={item.tcNumber}>
+                          {item.tcNumber} {item.buyer ? `— ${item.buyer}` : ''} {item.invoiceNumber ? `(${item.invoiceNumber})` : ''} [{item.standard}]
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <input
                   type="text"
                   required
-                  placeholder="e.g. CUC-04754082"
+                  list="assign-database-sold-tc-list"
+                  placeholder="e.g. CUC-04754082 (Select above or type to search)"
                   value={assignSoldTcInput}
                   onChange={(e) => setAssignSoldTcInput(e.target.value)}
                   className="w-full text-xs py-2 px-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
                 />
+                <datalist id="assign-database-sold-tc-list">
+                  {availableDatabaseTcs.map((t) => (
+                    <option key={t.tcNumber} value={t.tcNumber}>
+                      {t.tcNumber} - {t.buyer || t.customer || ''} {t.invoiceNumber ? `(${t.invoiceNumber})` : ''} [{t.standard}]
+                    </option>
+                  ))}
+                </datalist>
                 <p className="text-[11px] text-slate-500 mt-1.5">
                   TC number assign korle "Sold but not applied" column-ti automatic{' '}
                   <strong>0</strong> hoye jabe ebong status <strong>Certified</strong> hobe।
