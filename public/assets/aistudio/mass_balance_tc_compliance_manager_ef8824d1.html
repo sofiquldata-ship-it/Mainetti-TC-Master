@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mass Balance & TC Compliance Manager (RCS / GRS)</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .font-mono-num { font-family: 'JetBrains Mono', monospace; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col antialiased">
+
+  <!-- Main Top Navigation -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <!-- Brand & Certification Badges -->
+        <div class="flex items-center space-x-3">
+          <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white shadow-sm font-bold text-lg">
+            <i data-lucide="scale" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <h1 class="text-base sm:text-lg font-bold text-slate-800 leading-tight">Mass Balance & TC Manager</h1>
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                RCS &bull; GRS Compliant
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 hidden sm:block">Automated Inward &bull; Consumption (Loss 6%) &bull; Outward Reconciliation</p>
+          </div>
+        </div>
+
+        <!-- Global Controls & Action Buttons -->
+        <div class="flex items-center space-x-2 sm:space-x-3">
+          <!-- Standard Loss Rate Setting -->
+          <div class="hidden lg:flex items-center bg-slate-100 rounded-lg px-2.5 py-1.5 border border-slate-200 text-xs">
+            <span class="text-slate-500 mr-2 font-medium">Std Loss %:</span>
+            <input type="number" id="globalLossRate" value="6.0" min="0" max="40" step="0.5" 
+                   onchange="onLossRateChange()"
+                   class="w-14 text-center font-mono-num font-bold text-slate-800 bg-white border border-slate-300 rounded px-1 py-0.5 text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+            <span class="ml-1 text-slate-600 font-semibold">%</span>
+          </div>
+
+          <!-- Add Purchase TC Button -->
+          <button onclick="openModal('purchaseModal')" class="inline-flex items-center space-x-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-medium py-2 px-3 sm:px-3.5 rounded-lg border border-slate-300 shadow-xs transition-colors">
+            <i data-lucide="plus-circle" class="w-4 h-4 text-emerald-600"></i>
+            <span class="hidden sm:inline">Add Purchase TC</span>
+            <span class="sm:hidden">+ Inward</span>
+          </button>
+
+          <!-- Record Output Button -->
+          <button onclick="openModal('outputModal')" class="inline-flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold py-2 px-3 sm:px-3.5 rounded-lg shadow-sm transition-colors">
+            <i data-lucide="package-check" class="w-4 h-4"></i>
+            <span>Entry Output Qty</span>
+          </button>
+
+          <!-- Export CSV -->
+          <button onclick="exportToCSV()" class="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors" title="Export Audit-Ready CSV Report">
+            <i data-lucide="download" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- KPI Summary Metrics (5 Critical Cards) -->
+    <section class="grid grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4">
+      <!-- 1. Total Certified Inward -->
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-500 mb-1">
+          <span class="text-xs font-semibold uppercase tracking-wider">Total Inward</span>
+          <div class="p-1.5 rounded-md bg-blue-50 text-blue-600">
+            <i data-lucide="arrow-down-left" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div>
+          <div id="kpiTotalInward" class="text-lg sm:text-2xl font-bold font-mono-num text-slate-900">0.00</div>
+          <span class="text-[11px] text-slate-500 font-medium">Certified Purchase (Kg)</span>
+        </div>
+      </div>
+
+      <!-- 2. Total Auto-Calculated Input -->
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-500 mb-1">
+          <span class="text-xs font-semibold uppercase tracking-wider">Input Used (Auto)</span>
+          <div class="p-1.5 rounded-md bg-amber-50 text-amber-600">
+            <i data-lucide="layers" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div>
+          <div id="kpiTotalConsumed" class="text-lg sm:text-2xl font-bold font-mono-num text-amber-800">0.00</div>
+          <span class="text-[11px] text-amber-700 font-medium">Deducted from Raw Stock</span>
+        </div>
+      </div>
+
+      <!-- 3. Total Process Loss -->
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-500 mb-1">
+          <span class="text-xs font-semibold uppercase tracking-wider">Process Loss (6%)</span>
+          <div class="p-1.5 rounded-md bg-rose-50 text-rose-600">
+            <i data-lucide="trending-down" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div>
+          <div id="kpiTotalLoss" class="text-lg sm:text-2xl font-bold font-mono-num text-rose-600">0.00</div>
+          <span class="text-[11px] text-slate-500 font-medium">Auto Loss = Input - Output</span>
+        </div>
+      </div>
+
+      <!-- 4. Remaining Raw Stock Balance -->
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-500 mb-1">
+          <span class="text-xs font-semibold uppercase tracking-wider">Stock in Hand</span>
+          <div class="p-1.5 rounded-md bg-indigo-50 text-indigo-600">
+            <i data-lucide="archive" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div>
+          <div id="kpiRawBalance" class="text-lg sm:text-2xl font-bold font-mono-num text-indigo-700">0.00</div>
+          <span class="text-[11px] text-indigo-600 font-medium">Remaining Material (Kg)</span>
+        </div>
+      </div>
+
+      <!-- 5. Sold But Not Applied For TC Yet (The User's specific highlighted feature) -->
+      <div class="col-span-2 md:col-span-1 bg-amber-50/70 p-4 rounded-xl border border-amber-200 shadow-xs flex flex-col justify-between">
+        <div class="flex items-center justify-between text-amber-800 mb-1">
+          <span class="text-xs font-bold uppercase tracking-wider">Pending TC Qty</span>
+          <div class="p-1.5 rounded-md bg-amber-200/60 text-amber-800">
+            <i data-lucide="clock" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div>
+          <div id="kpiPendingSoldTC" class="text-lg sm:text-2xl font-bold font-mono-num text-amber-900">0.00</div>
+          <span class="text-[11px] text-amber-800 font-semibold">Sold but not applied yet</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Purchase TC Batch Stock Overview (Visual Progress Bars) -->
+    <section class="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-xs">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="boxes" class="w-5 h-5 text-slate-700"></i>
+          <h2 class="text-sm font-bold text-slate-800">Active Purchase TCs & Stock Utilization</h2>
+        </div>
+        <span class="text-xs text-slate-500">Live Batch Balances</span>
+      </div>
+      <div id="purchaseCardsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+
+    <!-- Formula Guidance Banner -->
+    <div class="bg-emerald-50/80 border border-emerald-200/80 rounded-xl p-3 sm:p-4 flex items-center justify-between flex-wrap gap-2 text-xs text-emerald-900">
+      <div class="flex items-center space-x-2.5">
+        <div class="p-1.5 rounded-lg bg-emerald-100 text-emerald-700 shrink-0">
+          <i data-lucide="check-check" class="w-4 h-4"></i>
+        </div>
+        <span><strong>Excel Formula Active:</strong> Apni shudhu <strong>Output Qty (Kg)</strong> enter korben। System automatically calculate korbe: <code>Input = Output / 0.94</code>, <code>Loss (6%) = Input * 6%</code>, ebong Purchase TC stock theke deduct hobe।</span>
+      </div>
+      <span class="text-[11px] font-semibold text-emerald-800 bg-white border border-emerald-200 px-2 py-0.5 rounded shadow-2xs">RCS / GRS Certified</span>
+    </div>
+
+    <!-- Main Mass Balance Ledger Table Container -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+      <!-- Search, Filters and Toolbar -->
+      <div class="p-4 sm:p-5 border-b border-slate-200 bg-slate-50/60 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+        <div class="flex flex-1 flex-wrap items-center gap-2.5">
+          <!-- Text Search -->
+          <div class="relative w-full sm:w-64">
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+              <i data-lucide="search" class="w-4 h-4"></i>
+            </span>
+            <input type="text" id="tableSearch" onkeyup="filterLedger()" placeholder="Search Purchase TC, Sold TC, Lot..." class="w-full text-xs sm:text-sm pl-9 pr-3 py-2 bg-white rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+          </div>
+
+          <!-- Filter by Standard -->
+          <select id="filterStandard" onchange="filterLedger()" class="text-xs sm:text-sm py-2 px-3 bg-white rounded-lg border border-slate-300 text-slate-700 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            <option value="ALL">All Standards</option>
+            <option value="RCS">RCS Standard</option>
+            <option value="GRS">GRS Standard</option>
+          </select>
+
+          <!-- Filter by Specific Purchase TC -->
+          <select id="filterPurchaseTC" onchange="filterLedger()" class="text-xs sm:text-sm py-2 px-3 bg-white rounded-lg border border-slate-300 text-slate-700 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono-num">
+            <option value="ALL">All Purchase TCs</option>
+          </select>
+
+          <!-- Filter by TC Status -->
+          <select id="filterStatus" onchange="filterLedger()" class="text-xs sm:text-sm py-2 px-3 bg-white rounded-lg border border-slate-300 text-slate-700 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            <option value="ALL">All Outward Status</option>
+            <option value="Certified">Sold TC Issued</option>
+            <option value="Pending">Pending TC (Not Applied)</option>
+          </select>
+        </div>
+
+        <div class="text-xs text-slate-500 flex items-center justify-between md:justify-end gap-2 font-medium">
+          <span>Showing <strong id="recordCount" class="font-bold text-slate-800">0</strong> entries</span>
+        </div>
+      </div>
+
+      <!-- Ledger Table (Exact Match with 18 Columns from Excel) -->
+      <div class="overflow-x-auto min-h-[350px]">
+        <table class="w-full text-left text-xs border-collapse">
+          <thead>
+            <tr class="bg-slate-100 text-slate-600 font-semibold uppercase tracking-wider border-b border-slate-200 whitespace-nowrap">
+              <th class="py-3 px-3 text-center w-10">#</th>
+              <th class="py-3 px-3">Purchase TC No</th>
+              <th class="py-3 px-3">Standard</th>
+              <th class="py-3 px-3">Lot No</th>
+              <th class="py-3 px-3 text-right">Opening Stock (Kg)</th>
+              <th class="py-3 px-3 text-right text-emerald-900 bg-emerald-100/60 font-bold border-x border-emerald-200">
+                <span class="inline-flex items-center gap-1">Output Qty (Kg) <span class="text-[9px] bg-emerald-300 text-emerald-950 px-1 rounded">USER INPUT</span></span>
+              </th>
+              <th class="py-3 px-3 text-right text-amber-800 bg-amber-50/50">Input Used (Kg) <span class="text-[9px] text-amber-600 font-normal">[Auto]</span></th>
+              <th class="py-3 px-3 text-right text-rose-700">Loss 6% (Kg) <span class="text-[9px] text-rose-500 font-normal">[Auto]</span></th>
+              <th class="py-3 px-3 text-right font-bold text-slate-900 bg-slate-50">Remaining Stock (Kg)</th>
+              <th class="py-3 px-3 text-right text-slate-800">Sold Qty (Kg)</th>
+              <!-- The user's exact requested column -->
+              <th class="py-3 px-3 text-right bg-amber-50/80 text-amber-900 font-bold border-x border-amber-200">
+                Sold but not applied for TC yet (Kg)
+              </th>
+              <th class="py-3 px-3">Sold TC Number</th>
+              <th class="py-3 px-3 text-center">Status</th>
+              <th class="py-3 px-3 text-center w-20">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="ledgerTableBody" class="divide-y divide-slate-200 bg-white">
+            <!-- Dynamic rows rendered via JavaScript -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Empty State -->
+      <div id="noResults" class="hidden py-12 text-center text-slate-400">
+        <i data-lucide="package-open" class="w-12 h-12 mx-auto stroke-[1.5] mb-2 text-slate-300"></i>
+        <p class="text-sm font-medium text-slate-500">No mass balance transactions match your criteria.</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal 1: Register New Purchase TC (Inward Stock) -->
+  <div id="purchaseModal" class="fixed inset-0 z-50 hidden bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden transform transition-all">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="file-plus-2" class="w-5 h-5 text-emerald-600"></i>
+          <h3 class="text-sm font-bold text-slate-800">Add Inward Purchase TC</h3>
+        </div>
+        <button onclick="closeModal('purchaseModal')" class="text-slate-400 hover:text-slate-600 p-1 rounded-md">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <form id="purchaseForm" onsubmit="handlePurchaseSubmit(event)" class="p-5 space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Purchase TC Number <span class="text-rose-500">*</span></label>
+          <input type="text" id="ptcNumber" required placeholder="e.g. 04628981" class="w-full text-xs py-2 px-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono-num">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Standard <span class="text-rose-500">*</span></label>
+            <select id="ptcStandard" required class="w-full text-xs py-2 px-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+              <option value="RCS">RCS (Recycled Claim)</option>
+              <option value="GRS">GRS (Global Recycled)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Lot / Batch No <span class="text-rose-500">*</span></label>
+            <input type="text" id="ptcLotNo" required placeholder="e.g. STM/EXP/GER117/2025" class="w-full text-xs py-2 px-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Certified Purchase Net Weight (Kg) <span class="text-rose-500">*</span></label>
+          <input type="number" step="0.01" min="0.01" id="ptcQuantity" required placeholder="e.g. 70500.00" class="w-full text-xs py-2 px-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono-num">
+        </div>
+
+        <div class="pt-3 border-t border-slate-200 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('purchaseModal')" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+          <button type="submit" class="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-xs">Save Purchase Stock</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 2: Output Entry (USER ONLY ENTERS OUTPUT QTY) -->
+  <div id="outputModal" class="fixed inset-0 z-50 hidden bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden transform transition-all">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="package-check" class="w-5 h-5 text-emerald-600"></i>
+          <div>
+            <h3 class="text-sm font-bold text-slate-800">Record Production Output</h3>
+            <p class="text-[11px] text-slate-500">Shudhu Output Qty enter korun &bull; System baki shob calculate korbe</p>
+          </div>
+        </div>
+        <button onclick="closeModal('outputModal')" class="text-slate-400 hover:text-slate-600 p-1 rounded-md">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <form id="outputForm" onsubmit="handleOutputSubmit(event)" class="p-5 space-y-4">
+        <!-- 1. Select Source Purchase TC -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Select Purchase TC <span class="text-rose-500">*</span></label>
+          <select id="outSourceTC" onchange="onSourceTCSelect()" required class="w-full text-xs py-2 px-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono-num">
+            <!-- Populated via JS -->
+          </select>
+          <div class="flex justify-between items-center text-[11px] mt-1 font-mono-num">
+            <span class="text-slate-500">Available Stock:</span>
+            <span id="outCurrentStockNotice" class="font-bold text-emerald-700">0.00 Kg</span>
+          </div>
+        </div>
+
+        <!-- 2. Primary Required Field: Output Qty -->
+        <div class="bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-200">
+          <label class="block text-xs font-bold text-emerald-950 mb-1">
+            Output Qty (Net weight in Kgs) <span class="text-rose-500">*</span>
+            <span class="text-[11px] font-normal text-emerald-700 ml-1">(Shipped / Produced Finished Goods)</span>
+          </label>
+          <input type="number" step="0.01" min="0.01" id="userOutputQty" oninput="runLiveAutoCalculations()" required placeholder="e.g. 898.66" class="w-full text-base font-bold py-2 px-3 rounded-lg border border-emerald-300 bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono-num text-slate-900">
+        </div>
+
+        <!-- Live Calculation Feedback Box -->
+        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+            <span>Automated Formula Calculation</span>
+            <span id="lossRateBadge" class="text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded text-[10px] font-semibold">Loss @ 6.0%</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="bg-white p-2 rounded-lg border border-slate-200">
+              <span class="text-[10px] text-slate-500 font-medium">Input Used (Output / 0.94)</span>
+              <div id="previewInputQty" class="text-sm font-bold text-amber-700 font-mono-num mt-0.5">0.00 Kg</div>
+            </div>
+            <div class="bg-white p-2 rounded-lg border border-slate-200">
+              <span class="text-[10px] text-slate-500 font-medium">Process Loss 6% (Input - Output)</span>
+              <div id="previewLossQty" class="text-sm font-bold text-rose-600 font-mono-num mt-0.5">0.00 Kg</div>
+            </div>
+            <div class="bg-white p-2 rounded-lg border border-slate-200">
+              <span class="text-[10px] text-slate-500 font-medium">Sold Qty (= Output)</span>
+              <div id="previewSoldQty" class="text-sm font-bold text-slate-800 font-mono-num mt-0.5">0.00 Kg</div>
+            </div>
+            <div class="bg-white p-2 rounded-lg border border-slate-200">
+              <span class="text-[10px] text-slate-500 font-medium">Remaining Raw Stock</span>
+              <div id="previewRemainingStock" class="text-sm font-bold text-emerald-700 font-mono-num mt-0.5">0.00 Kg</div>
+            </div>
+          </div>
+
+          <!-- Over-Allocation Warning -->
+          <div id="overStockWarning" class="hidden text-rose-700 text-xs font-semibold bg-rose-50 border border-rose-200 p-2.5 rounded-lg flex items-center space-x-2">
+            <i data-lucide="alert-octagon" class="w-4 h-4 text-rose-600 shrink-0"></i>
+            <span>Insufficient Stock! Calculated input exceeds available purchase stock.</span>
+          </div>
+        </div>
+
+        <!-- 3. Sold TC Details & Pending Toggle -->
+        <div class="space-y-3 pt-1">
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-xs font-semibold text-slate-700">Sold TC Number</label>
+              <span class="text-[10px] text-amber-700 font-medium bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                Faka rakhle automatic "Pending TC"-te jabe
+              </span>
+            </div>
+            <input type="text" id="userSoldTC" placeholder="e.g. CUC-04754082 (Leave empty if not applied yet)" class="w-full text-xs py-2 px-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono-num">
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Invoice / Delivery Lot Ref</label>
+            <input type="text" id="userLotRef" placeholder="e.g. INV-2026-091" class="w-full text-xs py-2 px-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          </div>
+        </div>
+
+        <div class="pt-3 border-t border-slate-200 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('outputModal')" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+          <button type="submit" id="btnSubmitOutput" class="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-xs">Save & Deduct Stock</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 3: Quick Assign / Update Sold TC Number -->
+  <div id="assignTCModal" class="fixed inset-0 z-50 hidden bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-sm w-full shadow-2xl border border-slate-200 overflow-hidden transform transition-all">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="badge-check" class="w-5 h-5 text-emerald-600"></i>
+          <h3 class="text-sm font-bold text-slate-800">Assign Sold TC Number</h3>
+        </div>
+        <button onclick="closeModal('assignTCModal')" class="text-slate-400 hover:text-slate-600 p-1 rounded-md">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <form id="assignTCForm" onsubmit="handleAssignTCSubmit(event)" class="p-5 space-y-4">
+        <input type="hidden" id="assignRowId">
+        <div>
+          <div class="text-xs text-slate-600 mb-2">
+            Output Qty: <strong id="assignOutputQtyDisplay" class="font-mono-num text-slate-900">0.00 Kg</strong>
+          </div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Enter Issued Sold TC Number <span class="text-rose-500">*</span></label>
+          <input type="text" id="assignSoldTCInput" required placeholder="e.g. CUC-04754082" class="w-full text-xs py-2 px-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono-num">
+          <p class="text-[11px] text-slate-500 mt-1.5">
+            TC number assign korle "Sold but not applied" column-ti automatic <strong>0</strong> hoye jabe ebong status <strong>Certified</strong> hobe।
+          </p>
+        </div>
+
+        <div class="pt-3 border-t border-slate-200 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('assignTCModal')" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+          <button type="submit" class="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-xs">Update TC</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toastBox" class="fixed bottom-5 right-5 z-50 transform translate-y-24 opacity-0 transition-all duration-300 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl flex items-center space-x-3 text-xs">
+    <i id="toastIcon" data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
+    <span id="toastMsg" class="font-medium">Notification</span>
+  </div>
+
+  <!-- Application Logic -->
+  <script>
+    // 1. Initial Master Purchase TCs from user's Excel sheet
+    let purchaseLedger = [
+      { tcNo: "03512485", standard: "RCS", totalInward: 14375.00, currentBalance: 693.37, lotNo: "60284N:LDPE 60283N:LDPE" },
+      { tcNo: "04529379", standard: "GRS", totalInward: 10500.00, currentBalance: 10500.00, lotNo: "STM/EXP/GER115/2025" },
+      { tcNo: "04532375", standard: "GRS", totalInward: 35000.00, currentBalance: 35000.00, lotNo: "STM/EXP/GER114/2025" },
+      { tcNo: "04628981", standard: "GRS", totalInward: 70500.00, currentBalance: 70500.00, lotNo: "STM/EXP/GER117/2025" }
+    ];
+
+    // 2. Initial Transaction Ledger matching exact user Excel rows
+    let ledgerData = [
+      {
+        id: 1,
+        purchaseTc: "03512485",
+        standard: "RCS",
+        lotNo: "60284N:LDPE",
+        openingQty: 14375.00,
+        outputQty: 898.66,
+        inputQty: 956.02,
+        lossQty: 57.36,
+        remainingStock: 13418.98,
+        soldQty: 898.66,
+        pendingSoldQty: 0.00,
+        soldTc: "CUC-04754082",
+        status: "Certified"
+      },
+      {
+        id: 2,
+        purchaseTc: "03512485",
+        standard: "RCS",
+        lotNo: "60283N:LDPE",
+        openingQty: 13418.98,
+        outputQty: 950.00,
+        inputQty: 1010.64,
+        lossQty: 60.64,
+        remainingStock: 12408.34,
+        soldQty: 950.00,
+        pendingSoldQty: 0.00,
+        soldTc: "CUC-04763111",
+        status: "Certified"
+      },
+      {
+        id: 3,
+        purchaseTc: "03512485",
+        standard: "RCS",
+        lotNo: "60284N:LDPE",
+        openingQty: 12408.34,
+        outputQty: 1053.00,
+        inputQty: 1120.21,
+        lossQty: 67.21,
+        remainingStock: 11288.13,
+        soldQty: 1053.00,
+        pendingSoldQty: 0.00,
+        soldTc: "CUC-04659279",
+        status: "Certified"
+      },
+      {
+        id: 4,
+        purchaseTc: "03512485",
+        standard: "RCS",
+        lotNo: "60283N:LDPE",
+        openingQty: 11288.13,
+        outputQty: 884.45,
+        inputQty: 940.90,
+        lossQty: 56.45,
+        remainingStock: 10347.23,
+        soldQty: 884.45,
+        pendingSoldQty: 0.00,
+        soldTc: "CUC-04812301",
+        status: "Certified"
+      },
+      {
+        id: 5,
+        purchaseTc: "03512485",
+        standard: "RCS",
+        lotNo: "60284N:LDPE",
+        openingQty: 10347.23,
+        outputQty: 9074.43,
+        inputQty: 9653.65,
+        lossQty: 579.22,
+        remainingStock: 693.58,
+        soldQty: 9074.43,
+        pendingSoldQty: 0.00,
+        soldTc: "CUC-04829910",
+        status: "Certified"
+      },
+      {
+        id: 6,
+        purchaseTc: "03512485",
+        standard: "RCS",
+        lotNo: "60284N:LDPE",
+        openingQty: 693.58,
+        outputQty: 0.20,
+        inputQty: 0.21,
+        lossQty: 0.01,
+        remainingStock: 693.37,
+        soldQty: 0.00,
+        pendingSoldQty: 0.20,
+        soldTc: "",
+        status: "Pending"
+      }
+    ];
+
+    // Helper: Number Formatter
+    function fmt(val) {
+      return Number(val || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // Main App Refresh Loop
+    function renderApp() {
+      renderPurchaseBatchCards();
+      renderTable();
+      updateKPIs();
+      populateSourceTCDropdown();
+      lucide.createIcons();
+    }
+
+    // 1. Render Purchase Batch Stock Utilization Cards
+    function renderPurchaseBatchCards() {
+      const container = document.getElementById("purchaseCardsContainer");
+      container.innerHTML = "";
+
+      purchaseLedger.forEach(item => {
+        const used = item.totalInward - item.currentBalance;
+        const usedPct = Math.min(100, Math.max(0, (used / item.totalInward) * 100)).toFixed(1);
+        const stdColor = item.standard === "GRS" 
+          ? "border-purple-200 bg-purple-50/40 text-purple-800" 
+          : "border-blue-200 bg-blue-50/40 text-blue-800";
+
+        const barColor = usedPct > 90 ? "bg-rose-500" : usedPct > 50 ? "bg-amber-500" : "bg-emerald-500";
+
+        const card = document.createElement("div");
+        card.className = "p-3.5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-all shadow-2xs";
+        card.innerHTML = `
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center space-x-1.5">
+              <span class="font-bold text-xs font-mono-num text-slate-800">${item.tcNo}</span>
+              <span class="text-[9px] px-1.5 py-0.5 rounded font-bold border ${stdColor}">${item.standard}</span>
+            </div>
+            <span class="text-[10px] text-slate-400 font-mono-num">${usedPct}% used</span>
+          </div>
+
+          <div class="w-full bg-slate-100 rounded-full h-1.5 mb-2.5 overflow-hidden">
+            <div class="${barColor} h-1.5 rounded-full transition-all duration-500" style="width: ${usedPct}%"></div>
+          </div>
+
+          <div class="flex justify-between items-end text-xs font-mono-num">
+            <div>
+              <span class="text-[10px] text-slate-400 block font-sans">Remaining</span>
+              <span class="font-bold text-slate-900">${fmt(item.currentBalance)}</span> <span class="text-[10px] text-slate-400">Kg</span>
+            </div>
+            <div class="text-right">
+              <span class="text-[10px] text-slate-400 block font-sans">Total Inward</span>
+              <span class="text-slate-600 font-medium">${fmt(item.totalInward)}</span>
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // 2. Render Main Mass Balance Table
+    function renderTable() {
+      const tbody = document.getElementById("ledgerTableBody");
+      const search = (document.getElementById("tableSearch").value || "").toLowerCase();
+      const stdFilter = document.getElementById("filterStandard").value;
+      const tcFilter = document.getElementById("filterPurchaseTC").value;
+      const statusFilter = document.getElementById("filterStatus").value;
+
+      tbody.innerHTML = "";
+
+      const filtered = ledgerData.filter(r => {
+        const matchesSearch = r.purchaseTc.toLowerCase().includes(search) ||
+                              r.lotNo.toLowerCase().includes(search) ||
+                              (r.soldTc && r.soldTc.toLowerCase().includes(search));
+        const matchesStd = (stdFilter === "ALL") || (r.standard === stdFilter);
+        const matchesTC = (tcFilter === "ALL") || (r.purchaseTc === tcFilter);
+        const matchesStatus = (statusFilter === "ALL") || (r.status === statusFilter);
+        return matchesSearch && matchesStd && matchesTC && matchesStatus;
+      });
+
+      document.getElementById("recordCount").innerText = filtered.length;
+      document.getElementById("noResults").classList.toggle("hidden", filtered.length > 0);
+
+      filtered.forEach((row, idx) => {
+        const isPending = row.status === "Pending" || !row.soldTc;
+        const stdClass = row.standard === "GRS" 
+          ? "bg-purple-100 text-purple-800 border-purple-200" 
+          : "bg-blue-100 text-blue-800 border-blue-200";
+
+        const statusHtml = isPending 
+          ? `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5 animate-pulse"></span>Pending TC
+             </span>`
+          : `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+               <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>Certified
+             </span>`;
+
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-50/80 transition-colors border-b border-slate-100 font-mono-num";
+        tr.innerHTML = `
+          <td class="py-3 px-3 text-center text-slate-400 font-sans text-[11px]">${idx + 1}</td>
+          <td class="py-3 px-3 font-semibold text-slate-900">${row.purchaseTc}</td>
+          <td class="py-3 px-3 font-sans">
+            <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold border ${stdClass}">
+              ${row.standard}
+            </span>
+          </td>
+          <td class="py-3 px-3 text-slate-600 font-sans truncate max-w-[140px]" title="${row.lotNo}">${row.lotNo}</td>
+          <td class="py-3 px-3 text-right text-slate-600">${fmt(row.openingQty)}</td>
+          <td class="py-3 px-3 text-right text-emerald-950 font-bold bg-emerald-50/70 border-x border-emerald-100">${fmt(row.outputQty)}</td>
+          <td class="py-3 px-3 text-right text-amber-800 font-medium bg-amber-50/30">${fmt(row.inputQty)}</td>
+          <td class="py-3 px-3 text-right text-rose-600">${fmt(row.lossQty)}</td>
+          <td class="py-3 px-3 text-right font-bold text-slate-900 bg-slate-50/70">${fmt(row.remainingStock)}</td>
+          <td class="py-3 px-3 text-right text-slate-800">${fmt(row.soldQty)}</td>
+          
+          <!-- Exact requested column: Sold but not applied for TC yet -->
+          <td class="py-3 px-3 text-right font-bold border-x border-amber-100 ${row.pendingSoldQty > 0 ? 'bg-amber-100/70 text-amber-900' : 'bg-amber-50/20 text-slate-400'}">
+            ${fmt(row.pendingSoldQty)}
+          </td>
+
+          <td class="py-3 px-3 font-sans">
+            ${row.soldTc ? `
+              <span class="font-mono-num text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                ${row.soldTc}
+              </span>
+            ` : `
+              <button onclick="openAssignModal(${row.id})" class="inline-flex items-center space-x-1 text-[11px] text-amber-700 hover:text-amber-800 font-semibold bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded border border-amber-300 transition-colors">
+                <i data-lucide="plus" class="w-3 h-3"></i>
+                <span>Assign TC</span>
+              </button>
+            `}
+          </td>
+          <td class="py-3 px-3 text-center font-sans">${statusHtml}</td>
+          <td class="py-3 px-3 text-center font-sans">
+            <button onclick="deleteLedgerRow(${row.id})" class="text-slate-400 hover:text-rose-600 p-1 rounded transition-colors" title="Delete Row">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // 3. Update Global KPI Cards
+    function updateKPIs() {
+      const totalInward = purchaseLedger.reduce((sum, p) => sum + p.totalInward, 0);
+      const totalInputUsed = ledgerData.reduce((sum, r) => sum + r.inputQty, 0);
+      const totalLoss = ledgerData.reduce((sum, r) => sum + r.lossQty, 0);
+      const stockBalance = purchaseLedger.reduce((sum, p) => sum + p.currentBalance, 0);
+      const pendingSoldTC = ledgerData.reduce((sum, r) => sum + (r.pendingSoldQty || 0), 0);
+
+      document.getElementById("kpiTotalInward").innerText = fmt(totalInward);
+      document.getElementById("kpiTotalConsumed").innerText = fmt(totalInputUsed);
+      document.getElementById("kpiTotalLoss").innerText = fmt(totalLoss);
+      document.getElementById("kpiRawBalance").innerText = fmt(stockBalance);
+      document.getElementById("kpiPendingSoldTC").innerText = fmt(pendingSoldTC);
+    }
+
+    // 4. Populate Dropdowns
+    function populateSourceTCDropdown() {
+      const select = document.getElementById("outSourceTC");
+      const filterSelect = document.getElementById("filterPurchaseTC");
+      
+      const currentVal = select.value;
+      const currentFilter = filterSelect.value;
+
+      select.innerHTML = "";
+      filterSelect.innerHTML = `<option value="ALL">All Purchase TCs</option>`;
+
+      purchaseLedger.forEach(item => {
+        const opt = document.createElement("option");
+        opt.value = item.tcNo;
+        opt.innerText = `TC ${item.tcNo} (${item.standard}) &bull; Stock: ${fmt(item.currentBalance)} Kg`;
+        select.appendChild(opt);
+
+        const filterOpt = document.createElement("option");
+        filterOpt.value = item.tcNo;
+        filterOpt.innerText = `TC ${item.tcNo} (${item.standard})`;
+        filterSelect.appendChild(filterOpt);
+      });
+
+      if (currentVal && purchaseLedger.some(p => p.tcNo === currentVal)) {
+        select.value = currentVal;
+      }
+      if (currentFilter) {
+        filterSelect.value = currentFilter;
+      }
+
+      onSourceTCSelect();
+    }
+
+    function onSourceTCSelect() {
+      const tcNo = document.getElementById("outSourceTC").value;
+      const tc = purchaseLedger.find(p => p.tcNo === tcNo);
+      if (tc) {
+        document.getElementById("outCurrentStockNotice").innerText = `${fmt(tc.currentBalance)} Kg`;
+      }
+      runLiveAutoCalculations();
+    }
+
+    // 5. LIVE AUTO CALCULATION LOGIC AS USER TYPES OUTPUT QTY
+    function runLiveAutoCalculations() {
+      const outputQty = parseFloat(document.getElementById("userOutputQty").value) || 0;
+      const lossRate = parseFloat(document.getElementById("globalLossRate").value) || 6.0;
+
+      // Excel formula: Input = Output / ((100 - LossRate) / 100)
+      const inputFactor = (100 - lossRate) / 100;
+      const inputQty = outputQty > 0 ? (outputQty / inputFactor) : 0;
+      const lossQty = inputQty > 0 ? (inputQty * (lossRate / 100)) : 0;
+      const soldQty = outputQty;
+
+      const tcNo = document.getElementById("outSourceTC").value;
+      const tc = purchaseLedger.find(p => p.tcNo === tcNo);
+      const currentStock = tc ? tc.currentBalance : 0;
+      const remainingStock = currentStock - inputQty;
+
+      // Update Preview Elements
+      document.getElementById("previewInputQty").innerText = `${fmt(inputQty)} Kg`;
+      document.getElementById("previewLossQty").innerText = `${fmt(lossQty)} Kg`;
+      document.getElementById("previewSoldQty").innerText = `${fmt(soldQty)} Kg`;
+      document.getElementById("previewRemainingStock").innerText = `${fmt(remainingStock)} Kg`;
+      document.getElementById("lossRateBadge").innerText = `Loss @ ${lossRate.toFixed(1)}%`;
+
+      // Over-Allocation Check
+      const warningEl = document.getElementById("overStockWarning");
+      const submitBtn = document.getElementById("btnSubmitOutput");
+
+      if (outputQty > 0 && inputQty > (currentStock + 0.001)) {
+        warningEl.classList.remove("hidden");
+        submitBtn.disabled = true;
+        submitBtn.className = "px-4 py-2 text-xs font-semibold text-white bg-slate-400 cursor-not-allowed rounded-lg shadow-xs";
+      } else {
+        warningEl.classList.add("hidden");
+        submitBtn.disabled = false;
+        submitBtn.className = "px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-xs";
+      }
+    }
+
+    function onLossRateChange() {
+      runLiveAutoCalculations();
+      showToast(`Loss calculation adjusted to ${document.getElementById("globalLossRate").value}%`);
+    }
+
+    // 6. Handle Output Form Submit
+    function handleOutputSubmit(e) {
+      e.preventDefault();
+      const tcNo = document.getElementById("outSourceTC").value;
+      const outputQty = parseFloat(document.getElementById("userOutputQty").value);
+      const lossRate = parseFloat(document.getElementById("globalLossRate").value) || 6.0;
+      const soldTc = document.getElementById("userSoldTC").value.trim();
+      const lotRef = document.getElementById("userLotRef").value.trim();
+
+      const sourceTC = purchaseLedger.find(p => p.tcNo === tcNo);
+      if (!sourceTC) {
+        showToast("Invalid Purchase TC selected", true);
+        return;
+      }
+
+      const opening = sourceTC.currentBalance;
+      const inputFactor = (100 - lossRate) / 100;
+      const inputQty = parseFloat((outputQty / inputFactor).toFixed(2));
+      const lossQty = parseFloat((inputQty - outputQty).toFixed(2));
+      const remaining = parseFloat((opening - inputQty).toFixed(2));
+
+      if (inputQty > (opening + 0.01)) {
+        showToast(`Stock Shortage! Remaining stock: ${fmt(opening)} Kg, required: ${fmt(inputQty)} Kg.`, true);
+        return;
+      }
+
+      // Deduct source stock
+      sourceTC.currentBalance = Math.max(0, remaining);
+
+      // Handle "Sold but not applied for TC yet" logic
+      const isIssued = soldTc.length > 0;
+      const soldQtyVal = isIssued ? outputQty : 0.00;
+      const pendingSoldQtyVal = isIssued ? 0.00 : outputQty;
+
+      ledgerData.push({
+        id: Date.now(),
+        purchaseTc: tcNo,
+        standard: sourceTC.standard,
+        lotNo: lotRef || sourceTC.lotNo,
+        openingQty: opening,
+        outputQty: outputQty,
+        inputQty: inputQty,
+        lossQty: lossQty,
+        remainingStock: remaining,
+        soldQty: soldQtyVal,
+        pendingSoldQty: pendingSoldQtyVal,
+        soldTc: soldTc,
+        status: isIssued ? "Certified" : "Pending"
+      });
+
+      closeModal("outputModal");
+      document.getElementById("outputForm").reset();
+      showToast(`Output ${fmt(outputQty)} Kg saved! Auto deducted ${fmt(inputQty)} Kg from TC #${tcNo}.`);
+      renderApp();
+    }
+
+    // 7. Handle New Purchase TC
+    function handlePurchaseSubmit(e) {
+      e.preventDefault();
+      const tcNumber = document.getElementById("ptcNumber").value.trim();
+      const standard = document.getElementById("ptcStandard").value;
+      const lotNo = document.getElementById("ptcLotNo").value.trim();
+      const qty = parseFloat(document.getElementById("ptcQuantity").value);
+
+      if (purchaseLedger.some(p => p.tcNo.toLowerCase() === tcNumber.toLowerCase())) {
+        showToast("This Purchase TC Number is already registered!", true);
+        return;
+      }
+
+      purchaseLedger.push({
+        tcNo: tcNumber,
+        standard: standard,
+        totalInward: qty,
+        currentBalance: qty,
+        lotNo: lotNo
+      });
+
+      closeModal("purchaseModal");
+      document.getElementById("purchaseForm").reset();
+      showToast(`Purchase TC #${tcNumber} (${fmt(qty)} Kg) added successfully.`);
+      renderApp();
+    }
+
+    // 8. Handle Quick Assign Sold TC Modal
+    function openAssignModal(id) {
+      const row = ledgerData.find(r => r.id === id);
+      if (!row) return;
+
+      document.getElementById("assignRowId").value = id;
+      document.getElementById("assignOutputQtyDisplay").innerText = `${fmt(row.outputQty)} Kg (${row.standard})`;
+      document.getElementById("assignSoldTCInput").value = "";
+      openModal("assignTCModal");
+    }
+
+    function handleAssignTCSubmit(e) {
+      e.preventDefault();
+      const rowId = parseInt(document.getElementById("assignRowId").value);
+      const soldTc = document.getElementById("assignSoldTCInput").value.trim();
+
+      const row = ledgerData.find(r => r.id === rowId);
+      if (!row) return;
+
+      row.soldTc = soldTc;
+      row.soldQty = row.outputQty;
+      row.pendingSoldQty = 0.00; // Zeroes out "Sold but not applied for TC yet"
+      row.status = "Certified";
+
+      closeModal("assignTCModal");
+      showToast(`Sold TC #${soldTc} assigned! Item certified.`);
+      renderApp();
+    }
+
+    // 9. Delete Ledger Row & Restore Stock
+    function deleteLedgerRow(id) {
+      const idx = ledgerData.findIndex(r => r.id === id);
+      if (idx === -1) return;
+
+      const record = ledgerData[idx];
+      const source = purchaseLedger.find(p => p.tcNo === record.purchaseTc);
+      if (source) {
+        source.currentBalance = parseFloat((source.currentBalance + record.inputQty).toFixed(2));
+      }
+
+      ledgerData.splice(idx, 1);
+      showToast("Transaction removed and purchase stock balance restored.");
+      renderApp();
+    }
+
+    // 10. Filter Listener
+    function filterLedger() {
+      renderTable();
+    }
+
+    // 11. Modal Utilities
+    function openModal(id) {
+      document.getElementById(id).classList.remove("hidden");
+      if (id === "outputModal") {
+        document.getElementById("userOutputQty").focus();
+        runLiveAutoCalculations();
+      }
+      lucide.createIcons();
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.add("hidden");
+    }
+
+    // 12. Toast Feedback
+    function showToast(msg, isError = false) {
+      const toast = document.getElementById("toastBox");
+      const icon = document.getElementById("toastIcon");
+      const label = document.getElementById("toastMsg");
+
+      label.innerText = msg;
+      if (isError) {
+        toast.className = "fixed bottom-5 right-5 z-50 transform translate-y-0 opacity-100 transition-all duration-300 bg-rose-900 text-white px-4 py-3 rounded-xl shadow-xl flex items-center space-x-3 text-xs border border-rose-700";
+        icon.className = "w-4 h-4 text-rose-300";
+        icon.setAttribute("data-lucide", "alert-circle");
+      } else {
+        toast.className = "fixed bottom-5 right-5 z-50 transform translate-y-0 opacity-100 transition-all duration-300 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl flex items-center space-x-3 text-xs border border-slate-700";
+        icon.className = "w-4 h-4 text-emerald-400";
+        icon.setAttribute("data-lucide", "check-circle");
+      }
+      lucide.createIcons();
+
+      setTimeout(() => {
+        toast.classList.add("translate-y-24", "opacity-0");
+      }, 3500);
+    }
+
+    // 13. Audit CSV Export matching user Excel layout
+    function exportToCSV() {
+      if (ledgerData.length === 0) {
+        showToast("No transaction records available to export.", true);
+        return;
+      }
+
+      let csv = "ID,Purchase TC No,Standard,Lot No,Opening Stock (Kg),Output Qty (Kg),Input Used (Kg),Process Loss 6% (Kg),Remaining Stock (Kg),Sold Qty (Kg),Sold but not applied for TC yet (Kg),Sold TC Number,Status\n";
+
+      ledgerData.forEach((r, i) => {
+        csv += `"${i + 1}","${r.purchaseTc}","${r.standard}","${r.lotNo.replace(/"/g, '""')}","${r.openingQty.toFixed(2)}","${r.outputQty.toFixed(2)}","${r.inputQty.toFixed(2)}","${r.lossQty.toFixed(2)}","${r.remainingStock.toFixed(2)}","${r.soldQty.toFixed(2)}","${r.pendingSoldQty.toFixed(2)}","${r.soldTc}","${r.status}"\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `Mass_Balance_Compliance_Audit_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast("Mass Balance Audit CSV downloaded!");
+    }
+
+    // Initialize application on load
+    window.onload = function() {
+      renderApp();
+    };
+  </script>
+</body>
+</html>

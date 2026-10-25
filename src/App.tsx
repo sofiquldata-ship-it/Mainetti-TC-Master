@@ -16,6 +16,7 @@ import { TcLeadTimeView } from './components/TcLeadTimeView';
 import { ExcelUploadView } from './components/ExcelUploadView';
 import { CommercialDocReaderView } from './components/CommercialDocReaderView';
 import { DeclarationView } from './components/DeclarationView';
+import { MassBalancePage } from './components/MassBalancePage';
 import { GoogleSheetsSyncModal } from './components/GoogleSheetsSyncModal';
 import {
   loadFromPersistentStorage,
@@ -747,6 +748,13 @@ export default function App() {
               onSelectPI={(pi) => setSelectedPi(pi)}
               selectedPiId={selectedPi?.id}
               onSaveToGoogleSheets={() => setIsGoogleSheetsModalOpen(true)}
+            />
+          ) : activeTab === 'Mass Balance' ? (
+            <MassBalancePage
+              onOpenGoogleSheetsSync={() => setIsGoogleSheetsModalOpen(true)}
+              googleUser={googleUser}
+              googleAccessToken={googleAccessToken}
+              linkedSheet={linkedSheet}
             />
           ) : piList.length === 0 ? (
             /* Empty State when no data has been uploaded yet */

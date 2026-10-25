@@ -745,3 +745,340 @@ export const importDataFromGoogleSpreadsheet = async (
     rowCount: parsedItems.length,
   };
 };
+
+export interface MassBalancePurchaseRecord {
+  tcNo: string;
+  standard: 'RCS' | 'GRS' | string;
+  totalInward: number;
+  currentBalance: number;
+  lotNo: string;
+}
+
+export interface MassBalanceLedgerRecord {
+  id: number | string;
+  date?: string;
+  purchaseTc: string;
+  standard: 'RCS' | 'GRS' | string;
+  lotNo: string;
+  buyer?: string;
+  openingQty: number;
+  outputQty: number;
+  inputQty: number;
+  lossQty: number;
+  remainingStock: number;
+  soldQty: number;
+  pendingSoldQty: number;
+  soldTc: string;
+  status: 'Certified' | 'Pending' | string;
+}
+
+/**
+ * Format headers and row matrices for Mass Balance Ledger & Stock Tabs
+ */
+export const formatMassBalanceSheetData = (
+  purchases: MassBalancePurchaseRecord[],
+  ledger: MassBalanceLedgerRecord[]
+) => {
+  const mbHeaders = [
+    'Transaction ID',
+    'Date',
+    'Sold TC No',
+    'Standard',
+    'Lot / Ref No',
+    'Buyer / Consignee',
+    'Source Purchase TC No',
+    'Opening Stock (Kg)',
+    'Output Produced Qty (Kg)',
+    'Sold but not applied for TC yet (Kg)',
+    'Input Required (Kg)',
+    'Process Loss (Kg)',
+    'Remaining Stock (Kg)',
+    'TC Status',
+  ];
+
+  const mbRows = ledger.map((item, idx) => [
+    item.id || idx + 1,
+    item.date || '2026-03-24',
+    item.soldTc || 'PENDING',
+    item.standard || 'RCS',
+    item.lotNo || '',
+    item.buyer || 'Mainetti Garments',
+    item.purchaseTc || '',
+    Number(item.openingQty || 0),
+    Number(item.outputQty || 0),
+    Number(item.pendingSoldQty || 0),
+    Number(item.inputQty || 0),
+    Number(item.lossQty || 0),
+    Number(item.remainingStock || 0),
+    item.status === 'Certified' ? 'Certified' : 'Pending TC',
+  ]);
+
+  const stockHeaders = [
+    'Purchase TC No',
+    'Standard',
+    'Lot / Batch Reference',
+    'Total Certified Inward (Kg)',
+    'Current Stock Balance (Kg)',
+    'Consumed Material (Kg)',
+    'Stock Utilization Rate (%)',
+  ];
+
+  const stockRows = purchases.map((p) => {
+    const totalInward = Number(p.totalInward || 0);
+    const currentBalance = Number(p.currentBalance || 0);
+    const consumed = Math.max(0, totalInward - currentBalance);
+    const utilRate = totalInward > 0 ? ((consumed / totalInward) * 100).toFixed(1) + '%' : '0.0%';
+    return [
+      p.tcNo,
+      p.standard,
+      p.lotNo,
+      totalInward,
+      currentBalance,
+      Number(consumed.toFixed(2)),
+      utilRate,
+    ];
+  });
+
+  return { mbHeaders, mbRows, stockHeaders, stockRows };
+};
+
+/**
+ * Sync Mass Balance records into an existing Google Spreadsheet (creates dedicated tabs if missing)
+ */
+export const syncMassBalanceToSpreadsheet = async (
+  accessToken: string,
+  spreadsheetId: string,
+  purchases: MassBalancePurchaseRecord[],
+  ledger: MassBalanceLedgerRecord[]
+): Promise<GoogleSheetsExportResult> => {
+  if (!accessToken) {
+    throw new Error('Google access token is required. Please sign in with Google first.');
+  }
+
+  // 1. Fetch metadata to check if target tabs already exist
+  const metaRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!metaRes.ok) {
+    const errText = await metaRes.text();
+    throw new Error(`Cannot access Google Spreadsheet (${spreadsheetId}): ${errText}`);
+  }
+
+  const metadata = await metaRes.json();
+  const existingSheets: Array<{ properties: { sheetId: number; title: string } }> =
+    metadata.sheets || [];
+
+  const mbTabName = 'Mass Balance Ledger';
+  const stockTabName = 'Purchase TC Stock';
+
+  const hasMbTab = existingSheets.some((s) => s.properties.title === mbTabName);
+  const hasStockTab = existingSheets.some((s) => s.properties.title === stockTabName);
+
+  // 2. Create missing tabs if needed
+  const addSheetRequests: any[] = [];
+  if (!hasMbTab) {
+    addSheetRequests.push({
+      addSheet: {
+        properties: {
+          title: mbTabName,
+          gridProperties: { frozenRowCount: 1 },
+        },
+      },
+    });
+  }
+  if (!hasStockTab) {
+    addSheetRequests.push({
+      addSheet: {
+        properties: {
+          title: stockTabName,
+          gridProperties: { frozenRowCount: 1 },
+        },
+      },
+    });
+  }
+
+  if (addSheetRequests.length > 0) {
+    try {
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ requests: addSheetRequests }),
+      });
+    } catch (tabCreateErr) {
+      console.warn('Tab creation notice:', tabCreateErr);
+    }
+  }
+
+  const { mbHeaders, mbRows, stockHeaders, stockRows } = formatMassBalanceSheetData(purchases, ledger);
+
+  // 3. Clear existing values to prevent orphaned rows
+  try {
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'${mbTabName}'!A1:Z5000:clear`,
+      { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'${stockTabName}'!A1:Z5000:clear`,
+      { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+  } catch (clearErr) {
+    console.warn('Optional clear step skipped:', clearErr);
+  }
+
+  // 4. Populate rows in both tabs
+  const batchUpdateRes = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        valueInputOption: 'USER_ENTERED',
+        data: [
+          {
+            range: `'${mbTabName}'!A1`,
+            values: [mbHeaders, ...mbRows],
+          },
+          {
+            range: `'${stockTabName}'!A1`,
+            values: [stockHeaders, ...stockRows],
+          },
+        ],
+      }),
+    }
+  );
+
+  if (!batchUpdateRes.ok) {
+    const errText = await batchUpdateRes.text();
+    throw new Error(`Failed to update Mass Balance sheet data: ${errText}`);
+  }
+
+  const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
+  const now = new Date().toLocaleString();
+  const title = metadata.properties?.title || 'Mainetti TC Master Database';
+
+  // Update saved config
+  const currentSaved = getSavedLinkedSheet();
+  saveLinkedSheetConfig({
+    spreadsheetId,
+    spreadsheetUrl,
+    title,
+    lastSyncedAt: now,
+    autoSync: currentSaved?.autoSync ?? true,
+  });
+
+  return {
+    spreadsheetId,
+    spreadsheetUrl,
+    title,
+    rowCount: ledger.length,
+  };
+};
+
+/**
+ * Create a new Google Spreadsheet specifically for Mass Balance records
+ */
+export const exportMassBalanceToNewSpreadsheet = async (
+  accessToken: string,
+  purchases: MassBalancePurchaseRecord[],
+  ledger: MassBalanceLedgerRecord[],
+  customTitle?: string
+): Promise<GoogleSheetsExportResult> => {
+  if (!accessToken) {
+    throw new Error('Google access token is required. Please sign in with Google first.');
+  }
+
+  // Check if a sheet is already linked; reuse it if present
+  const existingLinked = getSavedLinkedSheet();
+  if (existingLinked && existingLinked.spreadsheetId) {
+    return syncMassBalanceToSpreadsheet(accessToken, existingLinked.spreadsheetId, purchases, ledger);
+  }
+
+  const title = customTitle || `Mainetti Mass Balance & TC Compliance Records`;
+
+  // 1. Create spreadsheet with both tabs pre-configured
+  const createRes = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      properties: { title },
+      sheets: [
+        {
+          properties: {
+            title: 'Mass Balance Ledger',
+            gridProperties: { frozenRowCount: 1 },
+          },
+        },
+        {
+          properties: {
+            title: 'Purchase TC Stock',
+            gridProperties: { frozenRowCount: 1 },
+          },
+        },
+      ],
+    }),
+  });
+
+  if (!createRes.ok) {
+    const errBody = await createRes.text();
+    throw new Error(`Failed to create Google Sheet: ${errBody}`);
+  }
+
+  const createData = await createRes.json();
+  const spreadsheetId = createData.spreadsheetId;
+
+  const { mbHeaders, mbRows, stockHeaders, stockRows } = formatMassBalanceSheetData(purchases, ledger);
+
+  // 2. Populate data
+  await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        valueInputOption: 'USER_ENTERED',
+        data: [
+          {
+            range: `'Mass Balance Ledger'!A1`,
+            values: [mbHeaders, ...mbRows],
+          },
+          {
+            range: `'Purchase TC Stock'!A1`,
+            values: [stockHeaders, ...stockRows],
+          },
+        ],
+      }),
+    }
+  );
+
+  const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
+  const now = new Date().toLocaleString();
+
+  saveLinkedSheetConfig({
+    spreadsheetId,
+    spreadsheetUrl,
+    title,
+    lastSyncedAt: now,
+    autoSync: true,
+  });
+
+  return {
+    spreadsheetId,
+    spreadsheetUrl,
+    title,
+    rowCount: ledger.length,
+  };
+};
+

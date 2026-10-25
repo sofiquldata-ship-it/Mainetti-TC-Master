@@ -1,0 +1,6 @@
+{
+  "summary":  "Mass Balance Tracking Implementation Plan. Defines database schema for Purchase TC stock and Material Usage, and frontend UI requirements for tracking material inventory and consumption.",
+  "updatedAt":  "2026-10-25T03:44:24.441954801Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

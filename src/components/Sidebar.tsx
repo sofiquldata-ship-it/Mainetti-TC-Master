@@ -13,6 +13,7 @@ import {
   FileText,
   FileSpreadsheet,
   FileCheck2,
+  Scale,
 } from 'lucide-react';
 import { UploadedFileInfo } from '../types/tc';
 
@@ -111,6 +112,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Commercial Doc Reader',
       icon: FileSpreadsheet,
       badge: '5 Sheets',
+      badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 font-semibold',
+    },
+    {
+      id: 'Mass Balance',
+      label: 'Mass Balance',
+      icon: Scale,
+      badge: 'New',
       badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 font-semibold',
     },
   ];
