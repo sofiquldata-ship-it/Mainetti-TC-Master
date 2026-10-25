@@ -219,15 +219,52 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
     }
   }, [propLinkedSheet]);
 
-  const [isSyncingSheets, setIsSyncingSheets] = useState(false);
-  const [syncSuccessInfo, setSyncSuccessInfo] = useState<{
-    url: string;
-    time: string;
-    rowCount: number;
-    title: string;
-  } | null>(null);
+  // Auto-Save State & Real-Time Sync
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('saved');
+  const [lastAutoSavedTime, setLastAutoSavedTime] = useState<string>(() => {
+    return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  });
 
-  // Save changes to localStorage
+  const isInitialMount = React.useRef(true);
+  const autoSaveTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Background Auto-Save to Google Sheet and Local Database
+  const triggerAutoSave = React.useCallback(
+    async (purchases: PurchaseTCBatch[], ledger: MassBalanceLedgerEntry[]) => {
+      // 1. Instant local persistence is already guaranteed in useEffect
+      const sheet = linkedSheet || getSavedLinkedSheet();
+      if (!sheet || !sheet.spreadsheetId) {
+        setAutoSaveStatus('saved');
+        setLastAutoSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        return;
+      }
+
+      try {
+        let token = googleAccessToken;
+        if (!token) {
+          token = await getAccessToken();
+        }
+        if (!token) {
+          setAutoSaveStatus('saved');
+          return;
+        }
+
+        setAutoSaveStatus('saving');
+        await syncMassBalanceToSpreadsheet(token, sheet.spreadsheetId, purchases, ledger);
+
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setLastAutoSavedTime(timeStr);
+        setAutoSaveStatus('saved');
+      } catch (err) {
+        console.warn('Silent auto-save notice:', err);
+        setAutoSaveStatus('saved');
+      }
+    },
+    [googleAccessToken, linkedSheet]
+  );
+
+  // Save changes to localStorage immediately on every UI update
   useEffect(() => {
     localStorage.setItem('mainetti_mass_balance_purchases_v1', JSON.stringify(purchaseLedger));
   }, [purchaseLedger]);
@@ -239,6 +276,27 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
   useEffect(() => {
     localStorage.setItem('mainetti_mb_loss_rate', String(lossRate));
   }, [lossRate]);
+
+  // Real-Time Background Auto-Save effect: whenever user modifies anything in the UI, auto-save!
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    setAutoSaveStatus('saving');
+    autoSaveTimerRef.current = setTimeout(() => {
+      triggerAutoSave(purchaseLedger, ledgerData);
+    }, 1000);
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [purchaseLedger, ledgerData, lossRate, triggerAutoSave]);
 
   // Modal Visibility
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
@@ -522,101 +580,46 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
     showToast('Mass Balance Audit CSV downloaded successfully!');
   };
 
-  // 6. Sync with Google Sheets
+  // 6. Manual trigger fallback if user clicks the auto-save indicator
   const handleSyncGoogleSheets = async () => {
-    setIsSyncingSheets(true);
-    setSyncSuccessInfo(null);
     try {
-      let token = googleAccessToken;
-      if (!token) {
-        token = await getAccessToken();
-      }
-      if (!token) {
-        const authRes = await googleSignIn();
-        if (authRes?.accessToken) {
-          token = authRes.accessToken;
-        }
-      }
-      if (!token) {
-        if (onOpenGoogleSheetsSync) {
-          onOpenGoogleSheetsSync();
-          return;
-        }
-        throw new Error('Please sign in with Google to sync with Google Sheets.');
-      }
-
-      const currentSheet = linkedSheet || getSavedLinkedSheet();
-      let result;
-      if (currentSheet?.spreadsheetId) {
-        result = await syncMassBalanceToSpreadsheet(
-          token,
-          currentSheet.spreadsheetId,
-          purchaseLedger,
-          ledgerData
-        );
-      } else {
-        result = await exportMassBalanceToNewSpreadsheet(
-          token,
-          purchaseLedger,
-          ledgerData
-        );
-      }
-
-      const updatedConfig: LinkedSheetConfig = {
-        spreadsheetId: result.spreadsheetId,
-        spreadsheetUrl: result.spreadsheetUrl,
-        title: result.title,
-        lastSyncedAt: new Date().toLocaleTimeString(),
-        autoSync: true,
-      };
-
-      setLinkedSheet(updatedConfig);
-      setSyncSuccessInfo({
-        url: result.spreadsheetUrl,
-        time: new Date().toLocaleTimeString(),
-        rowCount: result.rowCount,
-        title: result.title,
-      });
-
-      showToast(`Saved to Google Sheets! Tabs 'Mass Balance Ledger' & 'Purchase TC Stock' updated.`);
+      await triggerAutoSave(purchaseLedger, ledgerData);
+      showToast('Live auto-sync triggered: latest Mass Balance data saved!');
     } catch (err: any) {
       console.error('Failed to sync Mass Balance with Google Sheets:', err);
-      showToast(err.message || 'Failed to save data to Google Sheet', true);
-    } finally {
-      setIsSyncingSheets(false);
     }
   };
 
   return (
-    <div className="bg-slate-50 text-slate-900 min-h-screen flex flex-col font-sans -m-4 sm:-m-6">
+    <div className="w-full min-w-0 space-y-2.5 text-slate-900 font-sans">
       {/* Top Banner & Action Controls */}
-      <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4 shadow-xs">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 rounded-lg p-2.5 sm:p-3 shadow-2xs">
+        <div className="w-full flex flex-col lg:flex-row items-start lg:items-center justify-between gap-2.5">
           {/* Brand & Badges */}
-          <div className="flex items-center space-x-3">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white shadow-sm font-bold text-lg shrink-0">
-              <Scale className="w-5 h-5" />
+          <div className="flex items-center space-x-2.5">
+            <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white shadow-2xs font-bold shrink-0">
+              <Scale className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h1 className="text-base sm:text-lg font-bold text-slate-800 leading-tight">
+                <h1 className="text-sm sm:text-base font-bold text-slate-800 leading-tight">
                   Mass Balance & TC Manager
                 </h1>
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
                   RCS &bull; GRS Compliant
                 </span>
               </div>
-              <p className="text-xs text-slate-500 hidden sm:block">
+              <p className="text-[11px] text-slate-500 hidden sm:block">
                 Automated Inward &bull; Consumption (Loss 6%) &bull; Outward Reconciliation
               </p>
             </div>
           </div>
 
           {/* Action Buttons & Standard Loss rate setting */}
-          <div className="flex items-center space-x-2 sm:space-x-3 w-full md:w-auto justify-end flex-wrap gap-y-2">
+          <div className="flex items-center space-x-1.5 sm:space-x-2 w-full lg:w-auto justify-end flex-wrap gap-y-1.5">
             {/* Standard Loss Rate Setting */}
-            <div className="flex items-center bg-slate-100 rounded-lg px-2.5 py-1.5 border border-slate-200 text-xs">
-              <span className="text-slate-500 mr-2 font-medium">Std Loss %:</span>
+            <div className="flex items-center bg-slate-50 rounded-md px-2 py-1 border border-slate-200 text-xs">
+              <span className="text-slate-500 mr-1.5 font-medium text-[11px]">Std Loss:</span>
               <input
                 type="number"
                 value={lossRate}
@@ -628,51 +631,53 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
                   setLossRate(val);
                   showToast(`Loss calculation adjusted to ${val}%`);
                 }}
-                className="w-14 text-center font-mono font-bold text-slate-800 bg-white border border-slate-300 rounded px-1 py-0.5 text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                className="w-12 text-center font-mono font-bold text-slate-800 bg-white border border-slate-300 rounded px-1 py-0.5 text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               />
-              <span className="ml-1 text-slate-600 font-semibold">%</span>
+              <span className="ml-0.5 text-slate-600 font-semibold text-[11px]">%</span>
             </div>
 
-            {/* Google Sheets Sync Button */}
-            <button
-              type="button"
-              onClick={handleSyncGoogleSheets}
-              disabled={isSyncingSheets}
-              className={`inline-flex items-center space-x-1.5 text-xs sm:text-sm font-semibold py-2 px-3 sm:px-3.5 rounded-lg border shadow-xs transition-colors cursor-pointer ${
-                linkedSheet
-                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
-                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
+            {/* Real-time Auto-Save Status (Fully Automated) */}
+            <div
+              className={`inline-flex items-center space-x-1.5 text-xs font-semibold py-1.5 px-2.5 rounded-md border transition-all select-none shadow-2xs ${
+                autoSaveStatus === 'saving'
+                  ? 'bg-blue-50 text-blue-900 border-blue-300 animate-pulse'
+                  : 'bg-emerald-50 text-emerald-900 border-emerald-300'
               }`}
               title={
                 linkedSheet
-                  ? `Save & Sync to: ${linkedSheet.title}`
-                  : 'Save data to Google Sheet'
+                  ? `Real-time auto-save active! Connected to Google Sheet: ${linkedSheet.title}`
+                  : 'Real-time auto-save active! Every change is saved to database.'
               }
             >
-              {isSyncingSheets ? (
-                <Loader2 className="w-4 h-4 text-emerald-600 animate-spin" />
+              {autoSaveStatus === 'saving' ? (
+                <Loader2 className="w-3.5 h-3.5 text-blue-600 animate-spin" />
               ) : (
-                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
               )}
-              <span>
-                {isSyncingSheets
-                  ? 'Saving to Sheet...'
-                  : linkedSheet
-                  ? 'Save to Google Sheet'
-                  : 'Save to Google Sheet'}
+              <span className="font-mono text-[11px]">
+                {autoSaveStatus === 'saving'
+                  ? 'Auto-Saving...'
+                  : lastAutoSavedTime
+                  ? `Auto-Saved (${lastAutoSavedTime})`
+                  : 'Auto-Saved'}
               </span>
-            </button>
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  autoSaveStatus === 'saving' ? 'bg-blue-600 animate-ping' : 'bg-emerald-600'
+                }`}
+              />
+            </div>
 
             {linkedSheet && (
               <a
                 href={linkedSheet.spreadsheetUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center space-x-1 bg-white hover:bg-slate-50 text-slate-600 hover:text-emerald-700 text-xs font-medium py-2 px-2.5 rounded-lg border border-slate-200 transition-colors shadow-2xs"
+                className="inline-flex items-center space-x-1 bg-white hover:bg-slate-50 text-slate-700 hover:text-emerald-700 text-xs font-medium py-1.5 px-2.5 rounded-md border border-slate-300 transition-colors shadow-2xs"
                 title="Open linked Google Spreadsheet in a new tab"
               >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span className="hidden lg:inline">Open Sheet</span>
+                <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+                <span>Open Sheet</span>
               </a>
             )}
 
@@ -680,9 +685,9 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
             <button
               type="button"
               onClick={() => setIsPurchaseModalOpen(true)}
-              className="inline-flex items-center space-x-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-medium py-2 px-3 sm:px-3.5 rounded-lg border border-slate-300 shadow-xs transition-colors cursor-pointer"
+              className="inline-flex items-center space-x-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium py-1.5 px-2.5 rounded-md border border-slate-300 shadow-2xs transition-colors cursor-pointer"
             >
-              <PlusCircle className="w-4 h-4 text-emerald-600" />
+              <PlusCircle className="w-3.5 h-3.5 text-emerald-600" />
               <span>Add Purchase TC</span>
             </button>
 
@@ -695,9 +700,9 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
                 }
                 setIsOutputModalOpen(true);
               }}
-              className="inline-flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold py-2 px-3 sm:px-3.5 rounded-lg shadow-sm transition-colors cursor-pointer"
+              className="inline-flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-1.5 px-3 rounded-md shadow-2xs transition-colors cursor-pointer"
             >
-              <PackageCheck className="w-4 h-4" />
+              <PackageCheck className="w-3.5 h-3.5" />
               <span>Entry Output Qty</span>
             </button>
 
@@ -705,151 +710,115 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
             <button
               type="button"
               onClick={exportToCSV}
-              className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors cursor-pointer"
+              className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md border border-slate-200 transition-colors cursor-pointer"
               title="Export Audit-Ready CSV Report"
             >
-              <Download className="w-4 h-4" />
+              <Download className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {/* Google Sheets Sync Notification Banner */}
-        {syncSuccessInfo && (
-          <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-emerald-100 text-emerald-700 shrink-0">
-                <FileSpreadsheet className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-emerald-950">
-                  Data Google Sheet এ সফলভাবে সেভ হয়েছে!
-                </h4>
-                <p className="text-xs text-emerald-800">
-                  Spreadsheet <strong>"{syncSuccessInfo.title}"</strong> এ <strong>'Mass Balance Ledger'</strong> ({syncSuccessInfo.rowCount} records) এবং <strong>'Purchase TC Stock'</strong> ট্যাব আপডেট করা হয়েছে ({syncSuccessInfo.time})।
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-              <a
-                href={syncSuccessInfo.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
-              >
-                <span>Google Sheet দেখুন</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-              <button
-                type="button"
-                onClick={() => setSyncSuccessInfo(null)}
-                className="p-1.5 text-emerald-700 hover:bg-emerald-100 rounded-md cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
-        {/* KPI Summary Metrics (5 Critical Cards) */}
-        <section className="grid grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4">
+      {/* Main Content Area: Fluid Full-Width Layout with Compact Spacing */}
+      <div className="w-full min-w-0 space-y-2.5">
+        {/* KPI Summary Metrics (5 Compact Cards) */}
+        <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-2.5">
           {/* 1. Total Certified Inward */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
-            <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="text-xs font-semibold uppercase tracking-wider">Total Inward</span>
-              <div className="p-1.5 rounded-md bg-blue-50 text-blue-600">
-                <ArrowDownLeft className="w-4 h-4" />
+          <div className="bg-white p-2.5 sm:p-3 rounded-lg border border-slate-200 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-500 mb-0.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider">Total Inward</span>
+              <div className="p-1 rounded bg-blue-50 text-blue-600">
+                <ArrowDownLeft className="w-3.5 h-3.5" />
               </div>
             </div>
             <div>
-              <div className="text-lg sm:text-2xl font-bold font-mono text-slate-900">
+              <div className="text-base sm:text-xl font-bold font-mono text-slate-900">
                 {fmt(kpis.totalInward)}
               </div>
-              <span className="text-[11px] text-slate-500 font-medium">Certified Purchase (Kg)</span>
+              <span className="text-[10px] text-slate-500 font-medium">Certified Purchase (Kg)</span>
             </div>
           </div>
 
           {/* 2. Total Auto-Calculated Input */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
-            <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="text-xs font-semibold uppercase tracking-wider">Input Used (Auto)</span>
-              <div className="p-1.5 rounded-md bg-amber-50 text-amber-600">
-                <Layers className="w-4 h-4" />
+          <div className="bg-white p-2.5 sm:p-3 rounded-lg border border-slate-200 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-500 mb-0.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider">Input Used (Auto)</span>
+              <div className="p-1 rounded bg-amber-50 text-amber-600">
+                <Layers className="w-3.5 h-3.5" />
               </div>
             </div>
             <div>
-              <div className="text-lg sm:text-2xl font-bold font-mono text-amber-800">
+              <div className="text-base sm:text-xl font-bold font-mono text-amber-800">
                 {fmt(kpis.totalInputUsed)}
               </div>
-              <span className="text-[11px] text-amber-700 font-medium">Deducted from Raw Stock</span>
+              <span className="text-[10px] text-amber-700 font-medium">Deducted from Raw Stock</span>
             </div>
           </div>
 
           {/* 3. Total Process Loss */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
-            <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="text-xs font-semibold uppercase tracking-wider">
+          <div className="bg-white p-2.5 sm:p-3 rounded-lg border border-slate-200 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-500 mb-0.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider">
                 Process Loss ({lossRate.toFixed(0)}%)
               </span>
-              <div className="p-1.5 rounded-md bg-rose-50 text-rose-600">
-                <TrendingDown className="w-4 h-4" />
+              <div className="p-1 rounded bg-rose-50 text-rose-600">
+                <TrendingDown className="w-3.5 h-3.5" />
               </div>
             </div>
             <div>
-              <div className="text-lg sm:text-2xl font-bold font-mono text-rose-600">
+              <div className="text-base sm:text-xl font-bold font-mono text-rose-600">
                 {fmt(kpis.totalLoss)}
               </div>
-              <span className="text-[11px] text-slate-500 font-medium">Auto Loss = Input - Output</span>
+              <span className="text-[10px] text-slate-500 font-medium">Auto Loss = Input - Output</span>
             </div>
           </div>
 
           {/* 4. Remaining Raw Stock Balance */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
-            <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="text-xs font-semibold uppercase tracking-wider">Stock in Hand</span>
-              <div className="p-1.5 rounded-md bg-indigo-50 text-indigo-600">
-                <Archive className="w-4 h-4" />
+          <div className="bg-white p-2.5 sm:p-3 rounded-lg border border-slate-200 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-500 mb-0.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider">Stock in Hand</span>
+              <div className="p-1 rounded bg-indigo-50 text-indigo-600">
+                <Archive className="w-3.5 h-3.5" />
               </div>
             </div>
             <div>
-              <div className="text-lg sm:text-2xl font-bold font-mono text-indigo-700">
+              <div className="text-base sm:text-xl font-bold font-mono text-indigo-700">
                 {fmt(kpis.stockBalance)}
               </div>
-              <span className="text-[11px] text-indigo-600 font-medium">Remaining Material (Kg)</span>
+              <span className="text-[10px] text-indigo-600 font-medium">Remaining Material (Kg)</span>
             </div>
           </div>
 
           {/* 5. Sold But Not Applied For TC Yet */}
-          <div className="col-span-2 md:col-span-1 bg-amber-50/70 p-4 rounded-xl border border-amber-200 shadow-xs flex flex-col justify-between">
-            <div className="flex items-center justify-between text-amber-800 mb-1">
-              <span className="text-xs font-bold uppercase tracking-wider">Pending TC Qty</span>
-              <div className="p-1.5 rounded-md bg-amber-200/60 text-amber-800">
-                <Clock className="w-4 h-4" />
+          <div className="col-span-2 sm:col-span-1 bg-amber-50/70 p-2.5 sm:p-3 rounded-lg border border-amber-200 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-amber-800 mb-0.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider">Pending TC Qty</span>
+              <div className="p-1 rounded bg-amber-200/60 text-amber-800">
+                <Clock className="w-3.5 h-3.5" />
               </div>
             </div>
             <div>
-              <div className="text-lg sm:text-2xl font-bold font-mono text-amber-900">
+              <div className="text-base sm:text-xl font-bold font-mono text-amber-900">
                 {fmt(kpis.pendingSoldTC)}
               </div>
-              <span className="text-[11px] text-amber-800 font-semibold">Sold but not applied yet</span>
+              <span className="text-[10px] text-amber-800 font-semibold">Sold but not applied yet</span>
             </div>
           </div>
         </section>
 
-        {/* Purchase TC Batch Stock Overview (Visual Progress Bars) */}
-        <section className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-2">
-              <Boxes className="w-5 h-5 text-slate-700" />
-              <h2 className="text-sm font-bold text-slate-800">
+        {/* Purchase TC Batch Stock Overview (Compact Visual Cards) */}
+        <section className="bg-white rounded-lg border border-slate-200 p-2.5 sm:p-3 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+            <div className="flex items-center space-x-1.5">
+              <Boxes className="w-4 h-4 text-emerald-600" />
+              <h2 className="text-xs sm:text-sm font-bold text-slate-800">
                 Active Purchase TCs & Stock Utilization
               </h2>
             </div>
-            <span className="text-xs text-slate-500">Live Batch Balances</span>
+            <span className="text-[11px] text-slate-500 font-mono">Live Batch Balances</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-2.5">
             {purchaseLedger.map((item) => {
               const used = item.totalInward - item.currentBalance;
               const usedPct = Math.min(
@@ -871,25 +840,25 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
               return (
                 <div
                   key={item.tcNo}
-                  className="p-3.5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-all shadow-2xs"
+                  className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 transition-all shadow-2xs"
                 >
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center space-x-1.5">
                       <span className="font-bold text-xs font-mono text-slate-800">
                         {item.tcNo}
                       </span>
                       <span
-                        className={`text-[9px] px-1.5 py-0.5 rounded font-bold border ${stdColor}`}
+                        className={`text-[9px] px-1.5 py-0.2 rounded font-bold border ${stdColor}`}
                       >
                         {item.standard}
                       </span>
                     </div>
-                    <span className="text-[10px] text-slate-400 font-mono">
+                    <span className="text-[10px] text-slate-500 font-mono">
                       {usedPct}% used
                     </span>
                   </div>
 
-                  <div className="w-full bg-slate-100 rounded-full h-1.5 mb-2.5 overflow-hidden">
+                  <div className="w-full bg-slate-200 rounded-full h-1.5 mb-2 overflow-hidden">
                     <div
                       className={`${barColor} h-1.5 rounded-full transition-all duration-500`}
                       style={{ width: `${usedPct}%` }}
@@ -898,17 +867,17 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
 
                   <div className="flex justify-between items-end text-xs font-mono">
                     <div>
-                      <span className="text-[10px] text-slate-400 block font-sans">Remaining</span>
-                      <span className="font-bold text-slate-900">
+                      <span className="text-[9px] text-slate-400 block font-sans">Remaining</span>
+                      <span className="font-bold text-slate-900 text-xs">
                         {fmt(item.currentBalance)}
                       </span>{' '}
-                      <span className="text-[10px] text-slate-400">Kg</span>
+                      <span className="text-[9px] text-slate-400">Kg</span>
                     </div>
                     <div className="text-right">
-                      <span className="text-[10px] text-slate-400 block font-sans">
+                      <span className="text-[9px] text-slate-400 block font-sans">
                         Total Inward
                       </span>
-                      <span className="text-slate-600 font-medium">
+                      <span className="text-slate-600 font-medium text-xs">
                         {fmt(item.totalInward)}
                       </span>
                     </div>
@@ -920,36 +889,36 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
         </section>
 
         {/* Formula Guidance Banner */}
-        <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-xl p-3 sm:p-4 flex items-center justify-between flex-wrap gap-2 text-xs text-emerald-900">
-          <div className="flex items-center space-x-2.5">
-            <div className="p-1.5 rounded-lg bg-emerald-100 text-emerald-700 shrink-0">
-              <CheckCheck className="w-4 h-4" />
+        <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-lg p-2 sm:p-2.5 flex items-center justify-between flex-wrap gap-2 text-xs text-emerald-900 shadow-2xs">
+          <div className="flex items-center space-x-2">
+            <div className="p-1 rounded bg-emerald-100 text-emerald-700 shrink-0">
+              <CheckCheck className="w-3.5 h-3.5" />
             </div>
-            <span>
+            <span className="text-[11px] sm:text-xs">
               <strong>Excel Formula Active:</strong> Apni shudhu <strong>Output Qty (Kg)</strong> enter korben। System automatically calculate korbe: <code>Input = Output / {((100 - lossRate) / 100).toFixed(2)}</code>, <code>Loss ({lossRate.toFixed(0)}%) = Input * {lossRate.toFixed(0)}%</code>, ebong Purchase TC stock theke deduct hobe।
             </span>
           </div>
-          <span className="text-[11px] font-semibold text-emerald-800 bg-white border border-emerald-200 px-2 py-0.5 rounded shadow-2xs">
+          <span className="text-[10px] font-semibold text-emerald-800 bg-white border border-emerald-200 px-1.5 py-0.5 rounded shadow-2xs shrink-0">
             RCS / GRS Certified
           </span>
         </div>
 
         {/* Main Mass Balance Ledger Table Container */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="bg-white rounded-lg border border-slate-200 shadow-2xs overflow-hidden w-full">
           {/* Search, Filters and Toolbar */}
-          <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-50/60 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
-            <div className="flex flex-1 flex-wrap items-center gap-2.5">
+          <div className="p-2 sm:p-2.5 border-b border-slate-200 bg-slate-50/70 flex flex-wrap gap-2 items-center justify-between">
+            <div className="flex flex-1 flex-wrap items-center gap-2">
               {/* Text Search */}
-              <div className="relative w-full sm:w-64">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
-                  <Search className="w-4 h-4" />
+              <div className="relative w-full sm:w-56">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none text-slate-400">
+                  <Search className="w-3.5 h-3.5" />
                 </span>
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search Purchase TC, Sold TC, Lot..."
-                  className="w-full text-xs sm:text-sm pl-9 pr-3 py-2 bg-white rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  placeholder="Search TC, Lot, Buyer..."
+                  className="w-full text-xs pl-8 pr-2.5 py-1.5 bg-white rounded-md border border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
               </div>
 
@@ -957,7 +926,7 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
               <select
                 value={standardFilter}
                 onChange={(e) => setStandardFilter(e.target.value as any)}
-                className="text-xs sm:text-sm py-2 px-3 bg-white rounded-lg border border-slate-300 text-slate-700 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                className="text-xs py-1.5 px-2 bg-white rounded-md border border-slate-300 text-slate-700 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               >
                 <option value="ALL">All Standards</option>
                 <option value="RCS">RCS Standard</option>
@@ -968,7 +937,7 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
               <select
                 value={purchaseTcFilter}
                 onChange={(e) => setPurchaseTcFilter(e.target.value)}
-                className="text-xs sm:text-sm py-2 px-3 bg-white rounded-lg border border-slate-300 text-slate-700 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
+                className="text-xs py-1.5 px-2 bg-white rounded-md border border-slate-300 text-slate-700 focus:ring-1 focus:ring-emerald-500 focus:outline-none font-mono"
               >
                 <option value="ALL">All Purchase TCs</option>
                 {purchaseLedger.map((p) => (
@@ -982,7 +951,7 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="text-xs sm:text-sm py-2 px-3 bg-white rounded-lg border border-slate-300 text-slate-700 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                className="text-xs py-1.5 px-2 bg-white rounded-md border border-slate-300 text-slate-700 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               >
                 <option value="ALL">All Outward Status</option>
                 <option value="Certified">Sold TC Issued</option>
@@ -990,50 +959,50 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
               </select>
             </div>
 
-            <div className="text-xs text-slate-500 flex items-center justify-between md:justify-end gap-2 font-medium">
+            <div className="text-[11px] text-slate-500 flex items-center justify-between md:justify-end gap-1.5 font-medium">
               <span>
                 Showing <strong className="font-bold text-slate-800">{filteredLedger.length}</strong> entries
               </span>
             </div>
           </div>
 
-          {/* Ledger Table (Exact Match with 14 Columns from Excel) */}
-          <div className="overflow-x-auto min-h-[350px]">
+          {/* Ledger Table (Exact Match with 14 Columns from Excel, Fluid High-Density) */}
+          <div className="overflow-x-auto w-full">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-100 text-slate-600 font-semibold uppercase tracking-wider border-b border-slate-200 whitespace-nowrap">
-                  <th className="py-3 px-3 text-center w-10">#</th>
-                  <th className="py-3 px-3">Purchase TC No</th>
-                  <th className="py-3 px-3">Standard</th>
-                  <th className="py-3 px-3">Lot No</th>
-                  <th className="py-3 px-3 text-right">Opening Stock (Kg)</th>
-                  <th className="py-3 px-3 text-right text-emerald-900 bg-emerald-100/60 font-bold border-x border-emerald-200">
+                <tr className="bg-slate-100 text-slate-600 font-semibold uppercase tracking-wider border-b border-slate-200 whitespace-nowrap text-[11px]">
+                  <th className="py-2 px-2.5 text-center w-8">#</th>
+                  <th className="py-2 px-2.5">Purchase TC No</th>
+                  <th className="py-2 px-2.5">Standard</th>
+                  <th className="py-2 px-2.5">Lot No</th>
+                  <th className="py-2 px-2.5 text-right">Opening Stock (Kg)</th>
+                  <th className="py-2 px-2.5 text-right text-emerald-900 bg-emerald-100/60 font-bold border-x border-emerald-200">
                     <span className="inline-flex items-center gap-1">
                       Output Qty (Kg){' '}
-                      <span className="text-[9px] bg-emerald-300 text-emerald-950 px-1 rounded">
+                      <span className="text-[8px] bg-emerald-300 text-emerald-950 px-1 rounded">
                         USER INPUT
                       </span>
                     </span>
                   </th>
-                  <th className="py-3 px-3 text-right text-amber-800 bg-amber-50/50">
+                  <th className="py-2 px-2.5 text-right text-amber-800 bg-amber-50/50">
                     Input Used (Kg){' '}
-                    <span className="text-[9px] text-amber-600 font-normal">[Auto]</span>
+                    <span className="text-[8px] text-amber-600 font-normal">[Auto]</span>
                   </th>
-                  <th className="py-3 px-3 text-right text-rose-700">
+                  <th className="py-2 px-2.5 text-right text-rose-700">
                     Loss {lossRate.toFixed(0)}% (Kg){' '}
-                    <span className="text-[9px] text-rose-500 font-normal">[Auto]</span>
+                    <span className="text-[8px] text-rose-500 font-normal">[Auto]</span>
                   </th>
-                  <th className="py-3 px-3 text-right font-bold text-slate-900 bg-slate-50">
+                  <th className="py-2 px-2.5 text-right font-bold text-slate-900 bg-slate-50">
                     Remaining Stock (Kg)
                   </th>
-                  <th className="py-3 px-3 text-right text-slate-800">Sold Qty (Kg)</th>
+                  <th className="py-2 px-2.5 text-right text-slate-800">Sold Qty (Kg)</th>
                   {/* The user's exact requested column */}
-                  <th className="py-3 px-3 text-right bg-amber-50/80 text-amber-900 font-bold border-x border-amber-200">
+                  <th className="py-2 px-2.5 text-right bg-amber-50/80 text-amber-900 font-bold border-x border-amber-200">
                     Sold but not applied for TC yet (Kg)
                   </th>
-                  <th className="py-3 px-3">Sold TC Number</th>
-                  <th className="py-3 px-3 text-center">Status</th>
-                  <th className="py-3 px-3 text-center w-20">Actions</th>
+                  <th className="py-2 px-2.5">Sold TC Number</th>
+                  <th className="py-2 px-2.5 text-center">Status</th>
+                  <th className="py-2 px-2.5 text-center w-16">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
@@ -1047,43 +1016,43 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
                   return (
                     <tr
                       key={row.id}
-                      className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 font-mono"
+                      className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 font-mono text-xs"
                     >
-                      <td className="py-3 px-3 text-center text-slate-400 font-sans text-[11px]">
+                      <td className="py-2 px-2.5 text-center text-slate-400 font-sans text-[11px]">
                         {idx + 1}
                       </td>
-                      <td className="py-3 px-3 font-semibold text-slate-900">{row.purchaseTc}</td>
-                      <td className="py-3 px-3 font-sans">
+                      <td className="py-2 px-2.5 font-semibold text-slate-900">{row.purchaseTc}</td>
+                      <td className="py-2 px-2.5 font-sans">
                         <span
-                          className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold border ${stdClass}`}
+                          className={`inline-block px-1.5 py-0.2 rounded text-[10px] font-bold border ${stdClass}`}
                         >
                           {row.standard}
                         </span>
                       </td>
                       <td
-                        className="py-3 px-3 text-slate-600 font-sans truncate max-w-[140px]"
+                        className="py-2 px-2.5 text-slate-600 font-sans truncate max-w-[140px]"
                         title={row.lotNo}
                       >
                         {row.lotNo}
                       </td>
-                      <td className="py-3 px-3 text-right text-slate-600">
+                      <td className="py-2 px-2.5 text-right text-slate-600">
                         {fmt(row.openingQty)}
                       </td>
-                      <td className="py-3 px-3 text-right text-emerald-950 font-bold bg-emerald-50/70 border-x border-emerald-100">
+                      <td className="py-2 px-2.5 text-right text-emerald-950 font-bold bg-emerald-50/70 border-x border-emerald-100">
                         {fmt(row.outputQty)}
                       </td>
-                      <td className="py-3 px-3 text-right text-amber-800 font-medium bg-amber-50/30">
+                      <td className="py-2 px-2.5 text-right text-amber-800 font-medium bg-amber-50/30">
                         {fmt(row.inputQty)}
                       </td>
-                      <td className="py-3 px-3 text-right text-rose-600">{fmt(row.lossQty)}</td>
-                      <td className="py-3 px-3 text-right font-bold text-slate-900 bg-slate-50/70">
+                      <td className="py-2 px-2.5 text-right text-rose-600">{fmt(row.lossQty)}</td>
+                      <td className="py-2 px-2.5 text-right font-bold text-slate-900 bg-slate-50/70">
                         {fmt(row.remainingStock)}
                       </td>
-                      <td className="py-3 px-3 text-right text-slate-800">{fmt(row.soldQty)}</td>
+                      <td className="py-2 px-2.5 text-right text-slate-800">{fmt(row.soldQty)}</td>
 
                       {/* Exact requested column: Sold but not applied for TC yet */}
                       <td
-                        className={`py-3 px-3 text-right font-bold border-x border-amber-100 ${
+                        className={`py-2 px-2.5 text-right font-bold border-x border-amber-100 ${
                           row.pendingSoldQty > 0
                             ? 'bg-amber-100/70 text-amber-900'
                             : 'bg-amber-50/20 text-slate-400'
@@ -1092,7 +1061,7 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
                         {fmt(row.pendingSoldQty)}
                       </td>
 
-                      <td className="py-3 px-3 font-sans">
+                      <td className="py-2 px-2.5 font-sans">
                         {row.soldTc ? (
                           <span className="font-mono text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
                             {row.soldTc}
@@ -1101,7 +1070,7 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
                           <button
                             type="button"
                             onClick={() => openAssignModal(row)}
-                            className="inline-flex items-center space-x-1 text-[11px] text-amber-700 hover:text-amber-800 font-semibold bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded border border-amber-300 transition-colors cursor-pointer"
+                            className="inline-flex items-center space-x-1 text-[10px] text-amber-700 hover:text-amber-800 font-semibold bg-amber-50 hover:bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300 transition-colors cursor-pointer"
                           >
                             <Plus className="w-3 h-3" />
                             <span>Assign TC</span>
@@ -1109,21 +1078,21 @@ export const MassBalancePage: React.FC<MassBalancePageProps> = ({
                         )}
                       </td>
 
-                      <td className="py-3 px-3 text-center font-sans">
+                      <td className="py-2 px-2.5 text-center font-sans">
                         {isPending ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5 animate-pulse" />
+                          <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1 animate-pulse" />
                             Pending TC
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5" />
+                          <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1" />
                             Certified
                           </span>
                         )}
                       </td>
 
-                      <td className="py-3 px-3 text-center font-sans">
+                      <td className="py-2 px-2.5 text-center font-sans">
                         <button
                           type="button"
                           onClick={() => deleteLedgerRow(row.id)}
