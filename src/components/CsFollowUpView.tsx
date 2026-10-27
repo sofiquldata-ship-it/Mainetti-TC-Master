@@ -58,7 +58,9 @@ type SortField =
   | 'piAgeDays'
   | 'orderDate'
   | 'piNumber'
+  | 'tcNumber'
   | 'buyer'
+  | 'customer'
   | 'orderQuantity';
 
 export const CsFollowUpView: React.FC<CsFollowUpViewProps> = ({
@@ -275,9 +277,15 @@ export const CsFollowUpView: React.FC<CsFollowUpViewProps> = ({
       } else if (sortField === 'piNumber') {
         valA = a.piNumber;
         valB = b.piNumber;
+      } else if (sortField === 'tcNumber') {
+        valA = a.tcNumber || '';
+        valB = b.tcNumber || '';
       } else if (sortField === 'buyer') {
         valA = a.buyer || '';
         valB = b.buyer || '';
+      } else if (sortField === 'customer') {
+        valA = a.customer || '';
+        valB = b.customer || '';
       } else if (sortField === 'orderQuantity') {
         valA = a.orderQuantity ?? a.quantityPcs ?? 0;
         valB = b.orderQuantity ?? b.quantityPcs ?? 0;
@@ -306,7 +314,12 @@ export const CsFollowUpView: React.FC<CsFollowUpViewProps> = ({
       setSortAsc(!sortAsc);
     } else {
       setSortField(field);
-      setSortAsc(field === 'piNumber' || field === 'buyer');
+      setSortAsc(
+        field === 'piNumber' ||
+          field === 'tcNumber' ||
+          field === 'buyer' ||
+          field === 'customer'
+      );
     }
   };
 
@@ -444,35 +457,66 @@ export const CsFollowUpView: React.FC<CsFollowUpViewProps> = ({
   };
 
   // Generate Push Email to CS Team (Draft confirmation not received)
+  const formatDateLong = (dateStr?: string) => {
+    if (!dateStr || !dateStr.trim() || dateStr.trim() === '-') return '-';
+    const cleanStr = dateStr.trim();
+    const parts = cleanStr.split('-');
+    if (parts.length === 3) {
+      const year = parts[0];
+      const monthIdx = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const months = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ];
+      if (monthIdx >= 0 && monthIdx < 12 && !isNaN(day)) {
+        return `${day} ${months[monthIdx]} ${year}`;
+      }
+    }
+    return cleanStr;
+  };
+
   const generatePushEmailSubject = (item: PIData) => {
-    return `[URGENT FOLLOW-UP] Draft TC Confirmation Not Received - PI: ${item.piNumber} (${item.buyer})`;
+    const tcNoStr = item.tcNumber && item.tcNumber.trim() ? ` [TC: ${item.tcNumber}]` : '';
+    return `[URGENT] Draft TC Confirmation Pending - PI: ${item.piNumber}${tcNoStr}`;
   };
 
   const generatePushEmailBody = (item: PIData) => {
     const days = getDaysFromDateToToday(item.draftTcDate) ?? 0;
-    const qty = (item.orderQuantity ?? item.quantityPcs ?? 0).toLocaleString();
-    const urgency =
-      days >= 15
-        ? 'SEVERE DELAY (>14d)'
-        : days >= 8
-        ? 'CRITICAL DELAY (>7d)'
-        : days >= 4
-        ? 'ATTENTION NEEDED'
-        : 'PENDING ACTION';
+    const rawAttn = item.contactPerson && item.contactPerson.trim() ? item.contactPerson.trim() : '';
+    let greeting = 'Dear CS Team,';
+    if (rawAttn) {
+      const lower = rawAttn.toLowerCase();
+      if (lower.startsWith('mr.') || lower.startsWith('ms.') || lower.startsWith('mrs.') || lower.startsWith('dr.')) {
+        greeting = `Dear ${rawAttn},`;
+      } else {
+        greeting = `Dear Mr. ${rawAttn},`;
+      }
+    }
+
+    const tcNoStr = item.tcNumber && item.tcNumber.trim() ? item.tcNumber : '';
+    const draftDateStr = formatDateLong(item.draftTcDate);
 
     return (
-      `Dear CS Team,\n\n` +
-      `Please note that the Draft Transaction Certificate (TC) for the following order was issued on ${item.draftTcDate || 'N/A'}, but we have NOT received the Draft Confirmation yet:\n\n` +
-      `• PI Number: ${item.piNumber}\n` +
-      `• Buyer: ${item.buyer}\n` +
-      `• Customer: ${item.customer || '-'}\n` +
-      `• Standard: ${item.standard || 'GRS'} Certified\n` +
-      `• Order Qty: ${qty} Pcs\n` +
-      `• Draft TC Issue Date: ${item.draftTcDate || '-'}\n` +
-      `• Waiting for Draft Confirmation: ${days} Days (${urgency})\n\n` +
-      `Kindly follow up urgently with the buyer / merchant team to obtain their draft TC approval so that we can submit the final TC application without further delay.\n\n` +
-      `Thank you,\n` +
-      `TC Documentation & Operations Team`
+      `${greeting}\n\n` +
+      `Buyer approval for the draft TC is pending for the following order:\n` +
+      `•\tPI: ${item.piNumber}\n` +
+      `•\tBuyer: ${item.buyer || '-'}\n` +
+      `•\tCustomer: ${item.customer || '-'}\n` +
+      `•\tTC Number: ${tcNoStr}\n` +
+      `•\tDraft Date: ${draftDateStr}\n` +
+      `•\tPending Duration: ${days} Days\n\n` +
+      `Please coordinate with the buyer and obtain the draft TC approval urgently so that we can proceed with the final TC submission.`
     );
   };
 
@@ -496,24 +540,27 @@ export const CsFollowUpView: React.FC<CsFollowUpViewProps> = ({
 
   // Batch Push Email Generator
   const generateBatchPushEmailSubject = (items: PIData[]) => {
-    return `[URGENT FOLLOW-UP] Draft TC Confirmations Pending for ${items.length} Orders - Action Required`;
+    return `[URGENT] Draft TC Confirmation Pending - ${items.length} Orders`;
   };
 
   const generateBatchPushEmailBody = (items: PIData[]) => {
     const lines = items.map((item, idx) => {
       const days = getDaysFromDateToToday(item.draftTcDate) ?? 0;
-      const qty = (item.orderQuantity ?? item.quantityPcs ?? 0).toLocaleString();
-      return `${idx + 1}. PI: ${item.piNumber} | Buyer: ${item.buyer} | Qty: ${qty} | Draft Date: ${item.draftTcDate || '-'} | Waiting: ${days} Days`;
+      const attn = item.contactPerson && item.contactPerson.trim() ? item.contactPerson.trim() : '-';
+      const tcStr = item.tcNumber && item.tcNumber.trim() ? item.tcNumber : '-';
+      const draftDateStr = formatDateLong(item.draftTcDate);
+      return (
+        `${idx + 1}. PI: ${item.piNumber} | TC: ${tcStr}\n` +
+        `   • Buyer: ${item.buyer || '-'} | Customer: ${item.customer || '-'}\n` +
+        `   • Attn: ${attn} | Draft Date: ${draftDateStr} | Pending: ${days} Days`
+      );
     });
 
     return (
       `Dear CS Team,\n\n` +
-      `Draft Transaction Certificates (TC) have been issued for the following ${items.length} orders, but Draft Confirmations have NOT been received yet:\n\n` +
-      lines.join('\n') +
-      `\n\n` +
-      `Please follow up urgently with the respective buyers and merchandisers to collect their draft TC approvals. Without their confirmation, final TC issuance remains blocked.\n\n` +
-      `Thank you,\n` +
-      `TC Documentation & Operations Team`
+      `Buyer approval for draft TCs is pending for the following ${items.length} orders:\n\n` +
+      lines.join('\n\n') +
+      `\n\nPlease coordinate with the respective buyers and obtain draft TC approvals urgently so that we can proceed with final TC submissions.`
     );
   };
 
@@ -871,11 +918,33 @@ export const CsFollowUpView: React.FC<CsFollowUpViewProps> = ({
                 </th>
                 <th
                   className="py-2 px-2.5 cursor-pointer hover:bg-slate-200 transition-colors"
+                  onClick={() => handleSort('tcNumber')}
+                >
+                  <div className="flex items-center gap-1">
+                    <span>TC Number</span>
+                    {sortField === 'tcNumber' && (
+                      sortAsc ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  className="py-2 px-2.5 cursor-pointer hover:bg-slate-200 transition-colors"
                   onClick={() => handleSort('buyer')}
                 >
                   <div className="flex items-center gap-1">
-                    <span>Buyer / Customer</span>
+                    <span>Buyer</span>
                     {sortField === 'buyer' && (
+                      sortAsc ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  className="py-2 px-2.5 cursor-pointer hover:bg-slate-200 transition-colors"
+                  onClick={() => handleSort('customer')}
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Customer</span>
+                    {sortField === 'customer' && (
                       sortAsc ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
                     )}
                   </div>
@@ -937,7 +1006,7 @@ export const CsFollowUpView: React.FC<CsFollowUpViewProps> = ({
             <tbody className="divide-y divide-slate-200 bg-white">
               {displayedRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-500">
+                  <td colSpan={12} className="py-12 text-center text-slate-500">
                     <div className="flex flex-col items-center justify-center space-y-2">
                       <div className="p-3 bg-slate-100 rounded-full text-slate-400">
                         <CheckCircle2 className="w-6 h-6 text-emerald-500" />
@@ -1022,16 +1091,29 @@ export const CsFollowUpView: React.FC<CsFollowUpViewProps> = ({
                         </button>
                       </td>
 
-                      {/* Buyer / Customer */}
+                      {/* TC Number */}
+                      <td className="py-2 px-2.5 font-mono text-slate-700">
+                        {item.tcNumber && item.tcNumber.trim() ? (
+                          <span className="font-semibold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-[11px]">
+                            {item.tcNumber}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 italic text-[11px]">Draft TC</span>
+                        )}
+                      </td>
+
+                      {/* Buyer */}
                       <td className="py-2 px-2.5">
-                        <div className="flex flex-col">
-                          <span className="font-bold text-slate-900 text-xs">
-                            {item.buyer || 'Unknown'}
-                          </span>
-                          <span className="text-[11px] text-slate-500 truncate max-w-[150px]" title={item.customer}>
-                            {item.customer}
-                          </span>
-                        </div>
+                        <span className="font-bold text-slate-900 text-xs">
+                          {item.buyer || 'Unknown'}
+                        </span>
+                      </td>
+
+                      {/* Customer */}
+                      <td className="py-2 px-2.5">
+                        <span className="text-xs text-slate-700 font-medium">
+                          {item.customer || '-'}
+                        </span>
                       </td>
 
                       {/* Order Qty */}
@@ -1366,9 +1448,27 @@ export const CsFollowUpView: React.FC<CsFollowUpViewProps> = ({
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-500 font-medium">Buyer / Customer:</span>
+                  <span className="text-slate-500 font-medium">TC Number:</span>
+                  <span className="font-mono font-bold text-slate-800 text-xs">
+                    {pushMailModalPi.tcNumber || 'Draft TC Issued'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-medium">Attention Person:</span>
+                  <span className="font-bold text-indigo-900 text-xs bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                    {pushMailModalPi.contactPerson || 'Concerned CS / Merchant'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-medium">Buyer:</span>
                   <span className="font-semibold text-slate-900">
-                    {pushMailModalPi.buyer} ({pushMailModalPi.customer})
+                    {pushMailModalPi.buyer || 'Unknown'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-medium">Customer:</span>
+                  <span className="text-slate-800">
+                    {pushMailModalPi.customer || '-'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
