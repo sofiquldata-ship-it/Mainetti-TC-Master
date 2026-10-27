@@ -14,6 +14,7 @@ import {
   FileSpreadsheet,
   FileCheck2,
   Scale,
+  Headphones,
 } from 'lucide-react';
 import { UploadedFileInfo } from '../types/tc';
 
@@ -25,6 +26,7 @@ interface SidebarProps {
   overdueCount: number;
   pendingCount: number;
   declarationCount?: number;
+  csFollowUpCount?: number;
   activeFileInfo: UploadedFileInfo | null;
   onRefresh?: () => void;
   onExport?: () => void;
@@ -42,6 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   overdueCount,
   pendingCount,
   declarationCount = 0,
+  csFollowUpCount = 0,
   activeFileInfo,
   onRefresh,
   onExport,
@@ -69,6 +72,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Commercial Follow-up',
       icon: FolderClock,
       badge: null,
+    },
+    {
+      id: 'CS Team Follow-up',
+      label: 'CS Team Follow-up',
+      icon: Headphones,
+      badge: csFollowUpCount > 0 ? `${csFollowUpCount}` : null,
+      badgeColor: 'bg-amber-500/25 text-amber-300 border-amber-500/40 font-bold',
     },
     {
       id: 'TC Lead Time',

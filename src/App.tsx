@@ -12,6 +12,7 @@ import { PiDetailDrawer } from './components/PiDetailDrawer';
 import { TcSummaryPageView } from './components/TcSummaryPageView';
 import { DocumentsView } from './components/DocumentsView';
 import { CommercialFollowUpView } from './components/CommercialFollowUpView';
+import { CsFollowUpView } from './components/CsFollowUpView';
 import { TcLeadTimeView } from './components/TcLeadTimeView';
 import { ExcelUploadView } from './components/ExcelUploadView';
 import { CommercialDocReaderView } from './components/CommercialDocReaderView';
@@ -531,6 +532,22 @@ export default function App() {
     }).length;
   }, [piList]);
 
+  // Calculate Draft TC pending confirmation count for CS Team Follow-up
+  const csDraftPendingCount = useMemo(() => {
+    return piList.filter((item) => {
+      if (isCancelledOrder(item) || isCancelledPi(item.piNumber)) return false;
+      const hasDraftTc = Boolean(
+        item.draftTcDate && item.draftTcDate.trim() && item.draftTcDate.trim() !== '-'
+      );
+      const hasDraftConf = Boolean(
+        item.draftConfirmationDate &&
+          item.draftConfirmationDate.trim() &&
+          item.draftConfirmationDate.trim() !== '-'
+      );
+      return hasDraftTc && !hasDraftConf;
+    }).length;
+  }, [piList]);
+
   // CSV Export utility
   const handleExportCSV = () => {
     if (filteredData.length === 0) return;
@@ -640,6 +657,7 @@ export default function App() {
         overdueCount={stats.overdue}
         pendingCount={stats.tcPending}
         declarationCount={declarationCount}
+        csFollowUpCount={csDraftPendingCount}
         activeFileInfo={activeFileInfo}
         onRefresh={handleReloadData}
         onExport={handleExportCSV}
@@ -727,6 +745,21 @@ export default function App() {
               filters={filters}
               onFilterChange={handleFilterChange}
               onResetFilters={handleResetFilters}
+              availableCustomers={availableCustomers}
+              availableBuyers={availableBuyers}
+              onSelectPI={(pi) => setSelectedPi(pi)}
+              selectedPiId={selectedPi?.id}
+              onExportCSV={handleExportCSV}
+              onSaveToGoogleSheets={() => setIsGoogleSheetsModalOpen(true)}
+              onBatchUpdatePIs={handleBatchUpdatePIs}
+              onUpdatePI={handleUpdatePI}
+            />
+          ) : activeTab === 'CS Team Follow-up' ? (
+            /* Dedicated CS Team Follow-up Page (Draft TC Confirmed Waiting) */
+            <CsFollowUpView
+              data={piList}
+              filters={filters}
+              onFilterChange={handleFilterChange}
               availableCustomers={availableCustomers}
               availableBuyers={availableBuyers}
               onSelectPI={(pi) => setSelectedPi(pi)}
