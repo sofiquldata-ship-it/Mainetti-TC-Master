@@ -61,6 +61,7 @@ type SortField =
   | 'tcNumber'
   | 'buyer'
   | 'customer'
+  | 'contactPerson'
   | 'orderQuantity';
 
 export const CsFollowUpView: React.FC<CsFollowUpViewProps> = ({
@@ -231,6 +232,7 @@ export const CsFollowUpView: React.FC<CsFollowUpViewProps> = ({
           item.piNumber.toLowerCase().includes(q) ||
           (item.buyer && item.buyer.toLowerCase().includes(q)) ||
           (item.customer && item.customer.toLowerCase().includes(q)) ||
+          (item.contactPerson && item.contactPerson.toLowerCase().includes(q)) ||
           (item.invoiceNumber && item.invoiceNumber.toLowerCase().includes(q)) ||
           (item.tcNumber && item.tcNumber.toLowerCase().includes(q)) ||
           (item.poReference && item.poReference.toLowerCase().includes(q)) ||
@@ -286,6 +288,9 @@ export const CsFollowUpView: React.FC<CsFollowUpViewProps> = ({
       } else if (sortField === 'customer') {
         valA = a.customer || '';
         valB = b.customer || '';
+      } else if (sortField === 'contactPerson') {
+        valA = a.contactPerson || '';
+        valB = b.contactPerson || '';
       } else if (sortField === 'orderQuantity') {
         valA = a.orderQuantity ?? a.quantityPcs ?? 0;
         valB = b.orderQuantity ?? b.quantityPcs ?? 0;
@@ -949,6 +954,17 @@ export const CsFollowUpView: React.FC<CsFollowUpViewProps> = ({
                     )}
                   </div>
                 </th>
+                <th
+                  className="py-2 px-2.5 cursor-pointer hover:bg-slate-200 transition-colors"
+                  onClick={() => handleSort('contactPerson')}
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Contact Person</span>
+                    {sortField === 'contactPerson' && (
+                      sortAsc ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                    )}
+                  </div>
+                </th>
 
                 <th
                   className="py-2 px-2.5 text-right cursor-pointer hover:bg-slate-200 transition-colors"
@@ -1006,7 +1022,7 @@ export const CsFollowUpView: React.FC<CsFollowUpViewProps> = ({
             <tbody className="divide-y divide-slate-200 bg-white">
               {displayedRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-slate-500">
+                  <td colSpan={13} className="py-12 text-center text-slate-500">
                     <div className="flex flex-col items-center justify-center space-y-2">
                       <div className="p-3 bg-slate-100 rounded-full text-slate-400">
                         <CheckCircle2 className="w-6 h-6 text-emerald-500" />
@@ -1113,6 +1129,13 @@ export const CsFollowUpView: React.FC<CsFollowUpViewProps> = ({
                       <td className="py-2 px-2.5">
                         <span className="text-xs text-slate-700 font-medium">
                           {item.customer || '-'}
+                        </span>
+                      </td>
+
+                      {/* Contact Person */}
+                      <td className="py-2 px-2.5">
+                        <span className="text-xs text-indigo-950 font-semibold bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100/80">
+                          {item.contactPerson || '-'}
                         </span>
                       </td>
 
